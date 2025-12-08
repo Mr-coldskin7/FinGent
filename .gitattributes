@@ -2,5 +2,6 @@
 *.md binary
 *.model binary
 *.safetensors binary
+RAG/models/qwen3-embedding/*.safetensors filter=lfs diff=lfs merge=lfs -text
 RAG/rag_db/chroma.sqlite3 filter=lfs diff=lfs merge=lfs -text
 RAG/models/qwen3-embedding/model.safetensors filter=lfs diff=lfs merge=lfs -text
