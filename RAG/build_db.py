@@ -45,7 +45,6 @@ def build_vector_db():
     for i in tqdm(range(0, len(documents), chunk_size), desc="处理进度"):
         chunk_docs = documents[i:i + chunk_size]
         chunk_metadatas = metadatas[i:i + chunk_size]
-        chunk_ids = ids[i:i + chunk_size]
         chunk_embeddings = model.encode(
             chunk_docs,
             batch_size=1,
