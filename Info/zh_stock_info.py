@@ -1,6 +1,6 @@
 import pandas as pd
 import akshare as ak
-from datetime import datetime
+from datetime import datetime, timedelta
 
 #========================================================================================================================
 df = pd.read_csv("..\Data\zh_stock_map.csv")
@@ -101,6 +101,7 @@ def recent_stock_list():
     stock_zh_a_spot = ak.stock_zh_a_spot()
     print(stock_zh_a_spot)
     return stock_zh_a_spot
+
 def get_financial_report(stock_num:str): 
     """
     获取财务报告数据
@@ -110,5 +111,17 @@ def get_financial_report(stock_num:str):
     print(stock_financial_report_sina_df.head())
     return stock_financial_report_sina_df
 
+def get_daily(symbol: str, n=250):
+    """最近 n 日日线（前复权）"""
+    symbol = input2number(symbol)
+    return ak.stock_zh_a_hist(symbol, period="daily", start_date=(datetime.today()-timedelta(days=n)).strftime("%Y%m%d"))
+
+def get_debt(symbol: str):
+    """获取股票负债信息"""
+    symbol = input2number(symbol)
+    stock_financial_debt_ths_df = ak.stock_financial_debt_ths(symbol=symbol, indicator="按年度")
+    print(stock_financial_debt_ths_df)
+
+
 if __name__ == "__main__":
-    stock_individual_price_info_recent("贵州茅台")
+    get_debt("贵州茅台")
