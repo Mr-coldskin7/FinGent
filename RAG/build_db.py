@@ -6,9 +6,12 @@ from tqdm import tqdm
 import torch
 import gc
 
-DATA_PATH = r"data\deepseek-fin\datasets-rpXruFMUY6-T-alpaca-2025-06-16.json"
-MODEL_PATH = r"models\qwen3-embedding"
-DB_PATH = r"rag_db"
+# 获取 RAG 目录路径
+RAG_DIR = os.path.dirname(os.path.abspath(__file__))
+
+DATA_PATH = os.path.join(RAG_DIR, "data", "deepseek-fin", "datasets-rpXruFMUY6-T-alpaca-2025-06-16.json")
+MODEL_PATH = os.path.join(RAG_DIR, "models", "qwen3-embedding")
+DB_PATH = os.path.join(RAG_DIR, "rag_db")
 model = SentenceTransformer(
     MODEL_PATH, trust_remote_code=True, model_kwargs={"torch_dtype": torch.float16}
 )

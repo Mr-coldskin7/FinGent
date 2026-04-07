@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Test Chart API</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; background: #1a1a2e; color: white; }
+    button { padding: 10px 20px; background: #8b5cf6; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    button:hover { background: #7c3aed; }
+    pre { background: rgba(0,0,0,0.3); padding: 15px; border-radius: 8px; overflow: auto; max-height: 500px; }
+    .error { color: #ef4444; }
+    .success { color: #22c55e; }
+  </style>
+</head>
+<body>
+  <h1>Chart API Test</h1>
+  <p>Symbol: <input type="text" id="symbol" value="GOOGL" /></p>
+  <button onclick="testAPI()">Test API</button>
+  <h2>Result:</h2>
+  <pre id="result">Click button to test...</pre>
+
+  <script>
+    async function testAPI() {
+      const resultEl = document.getElementById('result');
+      const symbol = document.getElementById('symbol').value;
+      
+      resultEl.textContent = 'Loading...';
+      
+      try {
+        const url = `http://localhost:8000/api/v1/backtest-chart?symbol=${encodeURIComponent(symbol)}`;
+        console.log('Fetching:', url);
+        
+        const res = await fetch(url);
+        console.log('Status:', res.status);
+        
+        const data = await res.json();
+        console.log('Data:', data);
+        
+        if (data.success) {
+          resultEl.innerHTML = `<span class="success">SUCCESS!</span>\n\n` + 
+            `Candles: ${data.data.candles?.length || 0}\n` +
+            `Trade Markers: ${data.data.trade_markers?.length || 0}\n` +
+            `Statistics: ${JSON.stringify(data.data.statistics, null, 2)}\n\n` +
+            `First candle: ${JSON.stringify(data.data.candles?.[0], null, 2)}\n\n` +
+            `Full response: ${JSON.stringify(data, null, 2)}`;
+        } else {
+          resultEl.innerHTML = `<span class="error">FAILED:</span> ${data.error}`;
+        }
+      } catch (err) {
+        resultEl.innerHTML = `<span class="error">ERROR:</span> ${err.message}`;
+      }
+    }
+  </script>
+</body>
+</html>

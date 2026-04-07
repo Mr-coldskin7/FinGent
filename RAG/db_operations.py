@@ -4,8 +4,13 @@ import chromadb
 import torch
 
 # =============================================================================
-MODEL_PATH = r"models\qwen3-embedding"
-DB_PATH = r"rag_db"
+import os
+# 获取当前文件所在目录（RAG/）
+RAG_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(RAG_DIR)
+
+MODEL_PATH = os.path.join(RAG_DIR, "models", "qwen3-embedding")
+DB_PATH = os.path.join(RAG_DIR, "rag_db")
 COLLECTION_NAME = "finance_rag"
 # =============================================================================
 
