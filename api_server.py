@@ -11,6 +11,7 @@ from typing import Optional
 import queue
 import pandas as pd
 load_dotenv()
+from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 
 # ========== 初始化 Graph ==========
 from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
@@ -22,10 +23,11 @@ from LLM.graph import FinGraph
 from LLM.unified_stock_tools import *
 
 # MySQL 持久化 - 使用上下文管理器
-_mysql_saver_ctx = PyMySQLSaver.from_conn_string(os.getenv("MYSQL_URL", "mysql+pymysql://root:password@localhost:3306/fingent"))
-_mysql_saver = _mysql_saver_ctx.__enter__()
-_mysql_saver.setup()
-checkpointer = _mysql_saver
+redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+_redis_ctx = AsyncRedisSaver.from_conn_string(redis_url)
+checkpointer = asyncio.run(_redis_ctx.__aenter__())
+
+
 
 model = ChatTongyi(api_key=os.getenv("QIANWEN_API_KEY"), temperature=0.5)
 
@@ -45,7 +47,7 @@ fin_graph = FinGraph(
 import atexit
 @atexit.register
 def cleanup():
-    _mysql_saver_ctx.__exit__(None, None, None)
+    _redis_ctx.__exit__(None, None, None)
 
 # ========== API ==========
 app = FastAPI()
@@ -254,9 +256,10 @@ async def backtest_stream(req: BacktestRequest):
                 return
             
             temp_model = ChatTongyi(api_key=os.getenv("QIANWEN_API_KEY"), temperature=req.temperature)
-            _temp_mysql_ctx = PyMySQLSaver.from_conn_string(os.getenv("MYSQL_URL", "mysql+pymysql://root:password@localhost:3306/fingent"))
-            temp_checkpointer = _temp_mysql_ctx.__enter__()
-            temp_checkpointer.setup()
+            redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+            _redis_ctx = AsyncRedisSaver.from_conn_string(redis_url)
+            temp_checkpointer = asyncio.run(_redis_ctx.__aenter__())
+
             
             temp_graph = FinGraph(
                 preprocessor=Preprocessor(temp_model, temp_checkpointer),
