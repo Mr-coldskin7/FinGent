@@ -28,35 +28,35 @@ def _require_backtrader() -> None:
         ) from _BACKTRADER_IMPORT_ERROR
 
 
-def load_price_dataframe(symbol: str, start: Optional[str] = None, end: Optional[str] = None) -> pd.DataFrame:
-    """加载价格数据，支持指定日期范围。
-    
+async def load_price_dataframe(
+    symbol: str, start: Optional[str] = None, end: Optional[str] = None
+) -> pd.DataFrame:
+    """加载价格数据，支持指定日期范围（异步）。
+
     为了避免缓存数据不完整的问题，当指定了日期范围时，
     直接调用底层 API 获取数据而不是使用 InfoService 的缓存。
     """
     from Data.providers import us_stock, zh_stock
     from Data.providers.adapters import adapt_us_prices, adapt_cn_prices
     from Data.service import InfoService  # 用于市场识别
-    
+
     # 使用 InfoService 解析市场类型
     service = InfoService()
     market, normalized_symbol = service._resolve(symbol)
-    
+
     # 根据市场类型调用对应的底层 API，传入日期范围
-    if market == 'US':
-        raw = us_stock.get_historical_stock_price_by_symbol(
-            symbol=normalized_symbol,
-            startDate=start,
-            endDate=end
+    if market == "US":
+        raw = await us_stock.get_historical_stock_price_by_symbol(
+            symbol=normalized_symbol, startDate=start, endDate=end
         )
         price_data = adapt_us_prices(raw, normalized_symbol)
-    elif market == 'CN':
+    elif market == "CN":
         # A股数据获取（假设 zh_stock 也有类似的日期参数支持）
-        df = zh_stock.get_historical_stock_price_by_symbol(normalized_symbol)
+        df = await zh_stock.get_historical_stock_price_by_symbol(normalized_symbol)
         price_data = adapt_cn_prices(df, normalized_symbol)
     else:
         raise ValueError(f"不支持的市场类型: {market}")
-    
+
     # 转换为 DataFrame
     rows = []
     for p in price_data:
@@ -78,15 +78,19 @@ def load_price_dataframe(symbol: str, start: Optional[str] = None, end: Optional
     if end:
         df = df[df["datetime"] <= pd.to_datetime(end)]
     if df.empty:
-        raise ValueError(f"No price data for {symbol} in selected period (start={start}, end={end}). "
-                        f"Available range: {df.index.min()} to {df.index.max()}" if len(df) > 0 else 
-                        f"No price data for {symbol} in selected period (start={start}, end={end}).")
+        raise ValueError(
+            f"No price data for {symbol} in selected period (start={start}, end={end}). "
+            f"Available range: {df.index.min()} to {df.index.max()}"
+            if len(df) > 0
+            else f"No price data for {symbol} in selected period (start={start}, end={end})."
+        )
 
     df = df.set_index("datetime")
     return df
 
 
 if bt is not None:
+
     class GraphSignalStrategy(bt.Strategy):  # type: ignore[misc]
         params = (
             ("graph", None),
@@ -106,6 +110,7 @@ if bt is not None:
             self.daily_states: List[Dict[str, Any]] = []  # 记录每日状态，用于流式返回
             # 创建事件循环用于异步操作
             import asyncio
+
             self._loop = asyncio.new_event_loop()
             asyncio.set_event_loop(self._loop)
 
@@ -130,7 +135,7 @@ if bt is not None:
 
         def next(self):
             import time
-            
+
             if self.order:
                 return
 
@@ -147,7 +152,9 @@ if bt is not None:
             position_size = int(position.size)
             avg_cost = float(position.price) if position_size != 0 else 0.0
             position_value = position_size * close_price
-            current_pct = (position_value / portfolio_value) if portfolio_value > 0 else 0.0
+            current_pct = (
+                (position_value / portfolio_value) if portfolio_value > 0 else 0.0
+            )
 
             graph_input = build_graph_input(
                 symbol=self.p.symbol,
@@ -162,13 +169,13 @@ if bt is not None:
                 f"BAR state cash={cash:.2f} value={portfolio_value:.2f} "
                 f"shares={position_size} avg_cost={avg_cost:.2f} close={close_price:.2f}"
             )
-            
+
             # 添加延迟避免API限流
             time.sleep(0.5)
-            
+
             # 设置回测日期环境变量，确保 Agent 知道"今天"是哪一天
             os.environ["FINGENT_SIMULATED_DATE"] = date_str
-            
+
             thread_id = f"{self.p.thread_prefix}_{self.p.symbol}_{date_str}"
             # 使用事件循环运行异步方法
             graph_result = self._loop.run_until_complete(
@@ -185,7 +192,7 @@ if bt is not None:
             log_msg = f"SIGNAL vote={signal.vote} confidence={signal.confidence:.1f} target={signal.target_position_pct:.2f}"
             if signal.reason:
                 # 限制原因长度，避免日志过长
-                reason_short = signal.reason[:100].replace('\n', ' ')
+                reason_short = signal.reason[:100].replace("\n", " ")
                 log_msg += f" | reason={reason_short}"
             self.log(log_msg)
 
@@ -204,9 +211,9 @@ if bt is not None:
                 "signal": self.last_signal,
             }
             self.daily_states.append(daily_state)
-            
+
             # 如果有回调函数，调用它（用于流式API实时推送）
-            if hasattr(self, 'on_daily_update') and callable(self.on_daily_update):
+            if hasattr(self, "on_daily_update") and callable(self.on_daily_update):
                 try:
                     self.on_daily_update(daily_state)
                 except Exception as e:
@@ -242,7 +249,9 @@ if bt is not None:
                     )
 
             if signal.confidence < float(self.p.min_confidence):
-                reason_short = signal.reason[:80].replace('\n', ' ') if signal.reason else ''
+                reason_short = (
+                    signal.reason[:80].replace("\n", " ") if signal.reason else ""
+                )
                 self.log(
                     f"SKIP signal vote={signal.vote} confidence={signal.confidence:.1f} "
                     f"target={signal.target_position_pct:.2f} (below min_confidence)"
@@ -253,7 +262,9 @@ if bt is not None:
             target_pct = float(signal.target_position_pct)
             diff = abs(target_pct - current_pct)
             if diff < float(self.p.rebalance_threshold):
-                reason_short = signal.reason[:80].replace('\n', ' ') if signal.reason else ''
+                reason_short = (
+                    signal.reason[:80].replace("\n", " ") if signal.reason else ""
+                )
                 self.log(
                     f"HOLD(no rebalance) vote={signal.vote} current={current_pct:.2f} "
                     f"target={target_pct:.2f} diff={diff:.2f}"
@@ -261,14 +272,20 @@ if bt is not None:
                 )
                 return
 
-            reason_short = signal.reason[:80].replace('\n', ' ') if signal.reason else ''
+            reason_short = (
+                signal.reason[:80].replace("\n", " ") if signal.reason else ""
+            )
             self.log(
                 f"REBALANCE vote={signal.vote} confidence={signal.confidence:.1f} "
                 f"current={current_pct:.2f} target={target_pct:.2f}"
                 f" | reason={reason_short}"
             )
-            self.order = self.order_target_percent(data=self.datas[0], target=target_pct)
+            self.order = self.order_target_percent(
+                data=self.datas[0], target=target_pct
+            )
+
 else:
+
     class GraphSignalStrategy:  # type: ignore[no-redef]
         def __init__(self, *args, **kwargs):
             _require_backtrader()
@@ -324,7 +341,7 @@ def run_backtest(
             return float(val) if val is not None else default
         except (TypeError, ValueError):
             return default
-    
+
     # 收益分析
     returns_analysis = strategy.analyzers.returns.get_analysis()
     # 回撤分析
@@ -333,40 +350,60 @@ def run_backtest(
     sharpe_analysis = strategy.analyzers.sharpe.get_analysis()
     # 交易分析
     trades_analysis = strategy.analyzers.trades.get_analysis()
-    
+
     # 构建标准评估指标
     metrics = {
         "symbol": symbol,
         "start_value": round(start_value, 2),
         "end_value": round(end_value, 2),
         "pnl": round(end_value - start_value, 2),
-        "total_return_pct": round(((end_value / start_value) - 1.0) * 100.0, 2) if start_value else 0.0,
+        "total_return_pct": (
+            round(((end_value / start_value) - 1.0) * 100.0, 2) if start_value else 0.0
+        ),
         "annual_return_pct": round(safe_float(returns_analysis.get("rnorm100")), 2),
-        "max_drawdown_pct": round(safe_float(drawdown_analysis.get("max", {}).get("drawdown")), 2),
+        "max_drawdown_pct": round(
+            safe_float(drawdown_analysis.get("max", {}).get("drawdown")), 2
+        ),
         "sharpe_ratio": round(safe_float(sharpe_analysis.get("sharperatio")), 3),
-        "volatility_ann_pct": round(safe_float(returns_analysis.get("rnorm100", 0)) / safe_float(sharpe_analysis.get("sharperatio", 1), 1), 2) if safe_float(sharpe_analysis.get("sharperatio")) > 0 else None,
+        "volatility_ann_pct": (
+            round(
+                safe_float(returns_analysis.get("rnorm100", 0))
+                / safe_float(sharpe_analysis.get("sharperatio", 1), 1),
+                2,
+            )
+            if safe_float(sharpe_analysis.get("sharperatio")) > 0
+            else None
+        ),
     }
-    
+
     # 交易统计
     total_trades = 0
     win_trades = 0
     loss_trades = 0
     win_rate = 0.0
-    
-    if trades_analysis and "total" in trades_analysis and "closed" in trades_analysis["total"]:
+
+    if (
+        trades_analysis
+        and "total" in trades_analysis
+        and "closed" in trades_analysis["total"]
+    ):
         total_trades = int(trades_analysis["total"]["closed"])
         if total_trades > 0:
             if "won" in trades_analysis and "total" in trades_analysis["won"]:
                 win_trades = int(trades_analysis["won"]["total"])
             if "lost" in trades_analysis and "total" in trades_analysis["lost"]:
                 loss_trades = int(trades_analysis["lost"]["total"])
-            win_rate = round((win_trades / total_trades) * 100.0, 2) if total_trades > 0 else 0.0
-    
+            win_rate = (
+                round((win_trades / total_trades) * 100.0, 2)
+                if total_trades > 0
+                else 0.0
+            )
+
     metrics["total_trades"] = total_trades
     metrics["win_trades"] = win_trades
     metrics["loss_trades"] = loss_trades
     metrics["win_rate_pct"] = win_rate
-    
+
     return {
         **metrics,
         "last_signal": strategy.last_signal,
@@ -379,12 +416,12 @@ def run_backtest(
     }
 
 
-def run_backtest_from_symbol(
+async def run_backtest_from_symbol(
     fin_graph,
     symbol: str = "AAPL",
     start: Optional[str] = None,
     end: Optional[str] = None,
     **kwargs,
 ) -> Dict[str, Any]:
-    data = load_price_dataframe(symbol=symbol, start=start, end=end)
+    data = await load_price_dataframe(symbol=symbol, start=start, end=end)
     return run_backtest(fin_graph=fin_graph, data=data, symbol=symbol, **kwargs)

@@ -8,6 +8,7 @@ import EmptyState from './components/EmptyState.vue';
 import InputArea from './components/InputArea.vue';
 import ThinkingChain from './components/ThinkingChain.vue';
 import BacktestPanel from './components/BacktestPanel.vue';
+import MarketPanel from './components/MarketPanel.vue';
 import type { Message, ChatResponse, AnalysisData } from './types/index';
 
 const API_BASE = 'http://localhost:8000';
@@ -18,7 +19,18 @@ const loading = ref(false);
 const threadId = ref<string | null>(null);
 const needsClarification = ref(false);
 const messagesEndRef = ref<HTMLElement | null>(null);
-const currentView = ref<'chat' | 'backtest'>('chat');
+const currentView = ref<'chat' | 'backtest' | 'market'>('chat');
+
+// 从行情页面跳转到分析
+const quickAnalyze = (symbol: string, name: string) => {
+  const prompt = `分析一下${name}(${symbol})`;
+  userInput.value = prompt;
+  currentView.value = 'chat';
+  // 延迟发送，确保视图切换完成
+  setTimeout(() => {
+    sendMessage();
+  }, 100);
+};
 
 // 思维链步骤
 const thinkingSteps = ref<any[]>([]);
@@ -69,7 +81,7 @@ function generateThinkingSteps(data: ChatResponse): any[] {
     id: `step-${stepId++}`,
     type: 'tool_decision',
     title: '路由决策',
-    content: `路由到: ${route === 'ALL' ? '双Agent投票模式' : route + ' Agent'}`,
+    content: `路由到: ${route === 'ALL' ? '多Agent投票模式' : route + ' Agent'}`,
     status: 'completed'
   });
   
@@ -476,6 +488,11 @@ const quickInput = (text: string) => {
         />
       </template>
       
+      <!-- 行情视图 -->
+      <template v-else-if="currentView === 'market'">
+        <MarketPanel @analyze="quickAnalyze" />
+      </template>
+
       <!-- 回测视图 -->
       <template v-else>
         <div class="backtest-view">
@@ -499,15 +516,15 @@ html {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background: #020617;
-  color: white;
+  background: #f8fafc;
+  color: #1e293b;
   overflow: hidden;
 }
 
 .app {
   height: 100vh;
   width: 100vw;
-  background: #020617;
+  background: #f8fafc;
   display: flex;
   overflow: hidden;
   position: relative;
@@ -531,7 +548,7 @@ body {
   left: 25%;
   width: 24rem;
   height: 24rem;
-  background: rgba(59, 130, 246, 0.1);
+  background: rgba(59, 130, 246, 0.08);
 }
 
 .orb-2 {
@@ -539,7 +556,7 @@ body {
   right: 25%;
   width: 24rem;
   height: 24rem;
-  background: rgba(6, 182, 212, 0.1);
+  background: rgba(6, 182, 212, 0.08);
 }
 
 .orb-3 {
@@ -548,17 +565,17 @@ body {
   transform: translate(-50%, -50%);
   width: 50rem;
   height: 50rem;
-  background: rgba(16, 185, 129, 0.05);
+  background: rgba(16, 185, 129, 0.04);
   filter: blur(200px);
 }
 
 .grid-pattern {
   position: absolute;
   inset: 0;
-  opacity: 0.02;
+  opacity: 0.03;
   background-image: 
-    linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px);
+    linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px);
   background-size: 50px 50px;
 }
 
@@ -585,19 +602,19 @@ body {
 }
 
 .messages::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   border-radius: 3px;
 }
 
 .messages::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.2);
 }
 
 /* 思维链面板 */
 .thinking-panel {
   margin: 0.75rem 0;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 1rem;
   overflow: hidden;
 }
@@ -612,7 +629,7 @@ body {
 }
 
 .thinking-panel-header:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .thinking-toggle {
@@ -628,7 +645,7 @@ body {
 .toggle-text {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(0, 0, 0, 0.8);
 }
 
 .step-count {
@@ -648,13 +665,13 @@ body {
 
 .hint-text {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.4);
 }
 
 .arrow-icon {
   width: 1rem;
   height: 1rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.4);
   transition: transform 0.3s ease;
 }
 
@@ -700,7 +717,7 @@ body {
 }
 
 .backtest-view::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.1);
   border-radius: 3px;
 }
 </style>

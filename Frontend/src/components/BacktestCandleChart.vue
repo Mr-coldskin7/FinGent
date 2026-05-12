@@ -77,15 +77,15 @@ const initChart = () => {
     width: rect.width,
     height: rect.height,
     layout: {
-      background: { type: ColorType.Solid, color: '#1a1a2e' },
-      textColor: 'rgba(255, 255, 255, 0.6)',
+      background: { type: ColorType.Solid, color: '#ffffff' },
+      textColor: 'rgba(0, 0, 0, 0.6)',
     },
     grid: {
-      vertLines: { color: 'rgba(255, 255, 255, 0.08)' },
-      horzLines: { color: 'rgba(255, 255, 255, 0.08)' },
+      vertLines: { color: 'rgba(0, 0, 0, 0.06)' },
+      horzLines: { color: 'rgba(0, 0, 0, 0.06)' },
     },
     timeScale: {
-      borderColor: 'rgba(255, 255, 255, 0.1)',
+      borderColor: 'rgba(0, 0, 0, 0.1)',
       timeVisible: true,
     },
   });
@@ -288,8 +288,8 @@ const formatNumber = (num: number | undefined, decimals = 2) => {
 
 <style scoped>
 .candle-chart {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 1rem;
   padding: 1.25rem;
   margin-bottom: 1.5rem;
@@ -307,7 +307,7 @@ const formatNumber = (num: number | undefined, decimals = 2) => {
 .chart-title {
   font-size: 1rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(0, 0, 0, 0.9);
   margin: 0;
   display: flex;
   align-items: center;
@@ -316,8 +316,8 @@ const formatNumber = (num: number | undefined, decimals = 2) => {
 
 .candle-count {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
-  background: rgba(255, 255, 255, 0.08);
+  color: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.05);
   padding: 0.125rem 0.5rem;
   border-radius: 9999px;
 }
@@ -330,7 +330,7 @@ const formatNumber = (num: number | undefined, decimals = 2) => {
 
 .stat-item {
   font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(0, 0, 0, 0.6);
 }
 
 .positive { color: #22c55e; }
@@ -340,7 +340,7 @@ const formatNumber = (num: number | undefined, decimals = 2) => {
   width: 100%;
   height: 450px;
   position: relative;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.03);
   border-radius: 0.5rem;
 }
 
@@ -357,7 +357,7 @@ const formatNumber = (num: number | undefined, decimals = 2) => {
   align-items: center;
   justify-content: center;
   gap: 0.75rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.4);
   font-size: 0.875rem;
   z-index: 10;
 }
@@ -365,8 +365,8 @@ const formatNumber = (num: number | undefined, decimals = 2) => {
 .loading-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid rgba(139, 92, 246, 0.2);
-  border-top-color: #8b5cf6;
+  border: 3px solid rgba(139, 92, 246, 0.15);
+  border-top-color: #7c3aed;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }

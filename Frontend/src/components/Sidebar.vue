@@ -1,12 +1,12 @@
 <script setup lang="ts">
 defineProps<{
-  currentView: 'chat' | 'backtest';
+  currentView: 'chat' | 'backtest' | 'market';
 }>();
 
 const emit = defineEmits<{
   'new-chat': [];
   'quick-input': [text: string];
-  'switch-view': [view: 'chat' | 'backtest'];
+  'switch-view': [view: 'chat' | 'backtest' | 'market'];
 }>();
 
 const quickActions = [
@@ -18,6 +18,7 @@ const quickActions = [
 
 const navItems = [
   { id: 'chat', icon: '💬', text: '智能对话' },
+  { id: 'market', icon: '📊', text: '行情中心' },
   { id: 'backtest', icon: '📈', text: '策略回测' },
 ] as const;
 </script>
@@ -87,12 +88,12 @@ const navItems = [
 <style scoped>
 .sidebar {
   width: 280px;
-  background: linear-gradient(180deg, rgba(15, 23, 42, 0.95) 0%, rgba(30, 41, 59, 0.95) 100%);
-  color: #fff;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98) 0%, rgba(248, 250, 252, 0.98) 100%);
+  color: #1e293b;
   display: flex;
   flex-direction: column;
   padding: 1.5rem;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-right: 1px solid rgba(0, 0, 0, 0.06);
   backdrop-filter: blur(20px);
 }
 
@@ -123,7 +124,7 @@ const navItems = [
 
 .logo-subtitle {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.45);
   margin: 0;
   padding-left: 2.5rem;
   letter-spacing: 0.05em;
@@ -142,10 +143,10 @@ const navItems = [
   align-items: center;
   gap: 0.875rem;
   padding: 0.875rem 1rem;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.03);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 0.75rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(0, 0, 0, 0.65);
   font-size: 0.9375rem;
   font-weight: 500;
   cursor: pointer;
@@ -153,15 +154,15 @@ const navItems = [
 }
 
 .nav-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: white;
+  background: rgba(0, 0, 0, 0.05);
+  color: #1e293b;
   transform: translateX(2px);
 }
 
 .nav-btn.active {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(124, 58, 237, 0.15) 100%);
-  border-color: rgba(139, 92, 246, 0.4);
-  color: #c4b5fd;
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.12) 0%, rgba(124, 58, 237, 0.08) 100%);
+  border-color: rgba(139, 92, 246, 0.35);
+  color: #7c3aed;
 }
 
 .nav-icon {
@@ -213,7 +214,7 @@ const navItems = [
 .quick-actions h3 {
   font-size: 0.6875rem;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(0, 0, 0, 0.4);
   margin-bottom: 0.875rem;
   letter-spacing: 0.12em;
   font-weight: 700;
@@ -232,7 +233,7 @@ const navItems = [
   gap: 0.75rem;
   padding: 0.75rem;
   background: transparent;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(0, 0, 0, 0.65);
   border: none;
   border-radius: 0.625rem;
   text-align: left;
@@ -242,8 +243,8 @@ const navItems = [
 }
 
 .actions-list button:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: white;
+  background: rgba(0, 0, 0, 0.04);
+  color: #1e293b;
 }
 
 .action-icon {
@@ -259,7 +260,7 @@ const navItems = [
 .footer {
   margin-top: auto;
   padding-top: 1.25rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -276,7 +277,7 @@ const navItems = [
 
 .footer-text p {
   font-size: 0.6875rem;
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(0, 0, 0, 0.4);
   margin: 0;
   line-height: 1.5;
 }

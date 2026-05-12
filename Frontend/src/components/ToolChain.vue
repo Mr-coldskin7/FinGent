@@ -55,6 +55,8 @@ function getAgentName(name: string): string {
   const names: Record<string, string> = {
     'Morefit': '📊 基本面分析',
     'TECHNICAL_NERD': '📈 技术面分析',
+    'RiskManager': '🛡️ 风控分析',
+    'SentimentAnalyzer': '💬 舆情分析',
   };
   return names[name] || name;
 }
@@ -64,6 +66,8 @@ function getAgentColor(name: string): string {
   const colors: Record<string, string> = {
     'Morefit': '#3b82f6',
     'TECHNICAL_NERD': '#10b981',
+    'RiskManager': '#f59e0b',
+    'SentimentAnalyzer': '#8b5cf6',
   };
   return colors[name] || '#6b7280';
 }
@@ -75,7 +79,7 @@ function getAgentColor(name: string): string {
     <div class="chain-header">
       <span class="header-icon">🔧</span>
       <span class="header-text">工具调用过程</span>
-      <span class="dual-badge">双Agent分析</span>
+      <span class="dual-badge">多Agent分析</span>
     </div>
     
     <div class="agents-container">
@@ -194,8 +198,8 @@ function getAgentColor(name: string): string {
 
 <style scoped>
 .tool-chain {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 1rem;
   overflow: hidden;
   margin-bottom: 1rem;
@@ -206,8 +210,8 @@ function getAgentColor(name: string): string {
   align-items: center;
   gap: 0.5rem;
   padding: 0.875rem 1rem;
-  background: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.02);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .header-icon {
@@ -217,15 +221,15 @@ function getAgentColor(name: string): string {
 .header-text {
   font-size: 0.8125rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(0, 0, 0, 0.6);
   flex: 1;
 }
 
 .agent-badge {
   font-size: 0.6875rem;
   padding: 0.25rem 0.625rem;
-  background: rgba(59, 130, 246, 0.2);
-  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
   border-radius: 9999px;
   font-weight: 600;
 }
@@ -233,8 +237,8 @@ function getAgentColor(name: string): string {
 .dual-badge {
   font-size: 0.6875rem;
   padding: 0.25rem 0.625rem;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(16, 185, 129, 0.2));
-  color: #34d399;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(16, 185, 129, 0.1));
+  color: #059669;
   border-radius: 9999px;
   font-weight: 600;
 }
@@ -289,15 +293,15 @@ function getAgentColor(name: string): string {
   left: 0;
   right: 0;
   height: 1px;
-  background: linear-gradient(to right, transparent, rgba(255,255,255,0.2), transparent);
+  background: linear-gradient(to right, transparent, rgba(0,0,0,0.15), transparent);
 }
 
 .divider-text {
   position: relative;
-  background: #020617;
+  background: #f8fafc;
   padding: 0 1rem;
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.45);
   font-weight: 500;
 }
 
@@ -326,15 +330,15 @@ function getAgentColor(name: string): string {
 }
 
 .input-icon {
-  background: rgba(59, 130, 246, 0.15);
+  background: rgba(59, 130, 246, 0.1);
 }
 
 .tool-icon {
-  background: rgba(251, 191, 36, 0.15);
+  background: rgba(251, 191, 36, 0.1);
 }
 
 .result-icon {
-  background: rgba(16, 185, 129, 0.15);
+  background: rgba(16, 185, 129, 0.1);
 }
 
 .step-content {
@@ -345,7 +349,7 @@ function getAgentColor(name: string): string {
 .step-label {
   font-size: 0.6875rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.45);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 0.25rem;
@@ -353,31 +357,31 @@ function getAgentColor(name: string): string {
 
 .step-text {
   font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(0, 0, 0, 0.8);
   line-height: 1.5;
   word-break: break-word;
 }
 
 .tool-name {
   font-weight: 600;
-  color: #fbbf24;
+  color: #d97706;
 }
 
 .result-text {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(0, 0, 0, 0.6);
   font-size: 0.75rem;
 }
 
 .step-args {
   margin-top: 0.375rem;
   padding: 0.5rem 0.625rem;
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.04);
   border-radius: 0.375rem;
   font-size: 0.75rem;
 }
 
 .args-label {
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.45);
   margin-right: 0.375rem;
 }
 
@@ -392,7 +396,7 @@ function getAgentColor(name: string): string {
   top: 2rem;
   bottom: 0;
   width: 2px;
-  background: linear-gradient(to bottom, rgba(255,255,255,0.1), rgba(255,255,255,0.05));
+  background: linear-gradient(to bottom, rgba(0,0,0,0.08), rgba(0,0,0,0.03));
   transform: translateX(-50%);
 }
 </style>

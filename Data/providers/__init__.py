@@ -6,4 +6,4 @@ Data Providers - 原始数据获取层
 from . import us_stock
 from . import zh_stock
 
-__all__ = ['us_stock', 'zh_stock']
+__all__ = ["us_stock", "zh_stock"]

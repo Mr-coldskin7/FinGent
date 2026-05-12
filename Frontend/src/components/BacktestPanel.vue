@@ -587,20 +587,11 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
         <div class="action-buttons">
           <button 
             class="btn btn-primary" 
-            @click="runBacktest"
-            :disabled="loading"
-          >
-            <span v-if="loading && !streaming">⏳ 执行中...</span>
-            <span v-else>🚀 运行回测</span>
-          </button>
-          
-          <button 
-            class="btn btn-secondary" 
             @click="() => runStreamingBacktest()"
             :disabled="loading"
           >
             <span v-if="streaming">⏳ 实时流式回测中...</span>
-            <span v-else>📈 实时流式回测</span>
+            <span v-else>🚀 运行回测</span>
           </button>
           
           <!-- 取消按钮 - 只在回测进行中显示 -->
@@ -748,12 +739,12 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 .panel-title {
   font-size: 1.5rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(0, 0, 0, 0.9);
   margin-bottom: 0.5rem;
 }
 
 .panel-desc {
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.5);
   font-size: 0.875rem;
 }
 
@@ -764,8 +755,8 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 }
 
 .config-section {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 1rem;
   padding: 1.25rem;
 }
@@ -773,7 +764,7 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 .section-title {
   font-size: 1rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(0, 0, 0, 0.85);
   margin-bottom: 1rem;
 }
 
@@ -783,20 +774,20 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
   gap: 0.75rem;
   margin-bottom: 1rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .quick-label {
   font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.5);
 }
 
 .quick-btn {
   padding: 0.375rem 0.75rem;
-  background: rgba(139, 92, 246, 0.15);
-  border: 1px solid rgba(139, 92, 246, 0.3);
+  background: rgba(139, 92, 246, 0.08);
+  border: 1px solid rgba(139, 92, 246, 0.2);
   border-radius: 0.5rem;
-  color: #a78bfa;
+  color: #7c3aed;
   font-size: 0.8125rem;
   cursor: pointer;
   transition: all 0.2s;
@@ -807,9 +798,9 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 }
 
 .quick-btn.reset {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.15);
-  color: rgba(255, 255, 255, 0.6);
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: rgba(0, 0, 0, 0.55);
 }
 
 .form-grid {
@@ -827,15 +818,15 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 
 .form-group label {
   font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(0, 0, 0, 0.6);
 }
 
 .form-input {
   padding: 0.625rem 0.875rem;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 0.5rem;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(0, 0, 0, 0.85);
   font-size: 0.875rem;
   outline: none;
   transition: all 0.2s;
@@ -848,7 +839,7 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 .form-range {
   -webkit-appearance: none;
   height: 4px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.08);
   border-radius: 2px;
   outline: none;
 }
@@ -894,13 +885,13 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 }
 
 .btn-secondary {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.05);
+  color: rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(0, 0, 0, 0.08);
 }
 
 .btn-cancel {
@@ -922,8 +913,8 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 .streaming-progress {
   margin-bottom: 1rem;
   padding: 0.875rem 1rem;
-  background: rgba(139, 92, 246, 0.1);
-  border: 1px solid rgba(139, 92, 246, 0.3);
+  background: rgba(139, 92, 246, 0.06);
+  border: 1px solid rgba(139, 92, 246, 0.2);
   border-radius: 0.75rem;
 }
 
@@ -935,17 +926,17 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 }
 
 .progress-text {
-  color: #c4b5fd;
+  color: #7c3aed;
   font-weight: 500;
 }
 
 .progress-value {
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(0, 0, 0, 0.65);
 }
 
 .progress-bar {
   height: 6px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.08);
   border-radius: 3px;
   overflow: hidden;
 }
@@ -960,16 +951,16 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 .error-message {
   margin-top: 1rem;
   padding: 0.875rem 1rem;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.06);
+  border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: 0.5rem;
-  color: #fca5a5;
+  color: #dc2626;
   font-size: 0.875rem;
 }
 
 .results-section {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 1rem;
   padding: 1.25rem;
 }
@@ -982,28 +973,28 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 }
 
 .summary-card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.05);
   border-radius: 0.75rem;
   padding: 1rem;
   text-align: center;
 }
 
 .summary-card.profit {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(124, 58, 237, 0.1) 100%);
-  border-color: rgba(139, 92, 246, 0.3);
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(124, 58, 237, 0.05) 100%);
+  border-color: rgba(139, 92, 246, 0.2);
 }
 
 .card-label {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.5);
   margin-bottom: 0.5rem;
 }
 
 .card-value {
   font-size: 1.5rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(0, 0, 0, 0.9);
 }
 
 .card-value.positive {
@@ -1016,13 +1007,13 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 
 .card-sub {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.45);
   margin-top: 0.25rem;
 }
 
 .signal-card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.05);
   border-radius: 0.75rem;
   padding: 1rem;
   margin-bottom: 1.25rem;
@@ -1030,7 +1021,7 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 
 .signal-header {
   font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.5);
   margin-bottom: 0.625rem;
 }
 
@@ -1068,7 +1059,7 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 .signal-confidence,
 .signal-position {
   font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(0, 0, 0, 0.65);
 }
 
 .equity-curve {
@@ -1077,14 +1068,14 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 
 .curve-title {
   font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(0, 0, 0, 0.6);
   margin-bottom: 0.75rem;
 }
 
 .curve-chart {
   height: 120px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.05);
   border-radius: 0.75rem;
   padding: 1rem;
   position: relative;
@@ -1093,7 +1084,7 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 .curve-line {
   position: relative;
   height: 80px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .curve-point {
@@ -1116,12 +1107,12 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
   justify-content: space-between;
   margin-top: 0.5rem;
   font-size: 0.6875rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.4);
 }
 
 .updates-section {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 1rem;
   padding: 1.25rem;
 }
@@ -1139,19 +1130,19 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
   grid-template-columns: 100px 80px 100px 80px;
   gap: 1rem;
   padding: 0.625rem 0.875rem;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(0, 0, 0, 0.02);
   border-radius: 0.5rem;
   align-items: center;
   font-size: 0.8125rem;
 }
 
 .update-date {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(0, 0, 0, 0.55);
 }
 
 .update-price,
 .update-value {
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(0, 0, 0, 0.75);
 }
 
 .update-signal {

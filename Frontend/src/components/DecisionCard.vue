@@ -166,9 +166,9 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
 <style scoped>
 .decision-card {
   animation: slide-up 0.5s ease-out forwards;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.8);
   backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 1.25rem;
   overflow: hidden;
   transition: transform 0.2s, box-shadow 0.2s;
@@ -176,14 +176,14 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
 
 .decision-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.1);
 }
 
 .card-header {
   position: relative;
   padding: 1.25rem 1.5rem;
-  background: linear-gradient(to right, rgba(255,255,255,0.03), transparent);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: linear-gradient(to right, rgba(0,0,0,0.02), transparent);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .header-content {
@@ -202,12 +202,12 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
   width: 3rem;
   height: 3rem;
   border-radius: 0.875rem;
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(6, 182, 212, 0.15));
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(6, 182, 212, 0.08));
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 4px 15px -5px rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 15px -5px rgba(59, 130, 246, 0.1);
 }
 
 .stock-icon {
@@ -223,13 +223,13 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
 .stock-name {
   font-size: 1.25rem;
   font-weight: 700;
-  color: white;
+  color: #1e293b;
   margin: 0;
 }
 
 .stock-code {
   font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(0, 0, 0, 0.5);
   margin: 0;
   font-family: monospace;
   letter-spacing: 0.05em;
@@ -290,13 +290,13 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
 .reason-label {
   font-size: 0.6875rem;
   font-weight: 700;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(0, 0, 0, 0.5);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .reason-text {
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(0, 0, 0, 0.8);
   font-size: 0.9375rem;
   line-height: 1.85;
   margin: 0;
@@ -310,10 +310,10 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
 }
 
 .metric-box {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(0, 0, 0, 0.02);
   border-radius: 0.875rem;
   padding: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .metric-header {
@@ -328,7 +328,7 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
   align-items: center;
   gap: 0.375rem;
   font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.55);
 }
 
 .metric-icon {
@@ -343,7 +343,7 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
 .progress-bar {
   position: relative;
   height: 0.5rem;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.06);
   border-radius: 9999px;
   overflow: hidden;
 }

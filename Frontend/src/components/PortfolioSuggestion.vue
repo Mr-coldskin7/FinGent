@@ -18,10 +18,10 @@ defineProps<Props>();
 
 <style scoped>
 .portfolio-suggestion {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.12), rgba(6, 182, 212, 0.08));
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(6, 182, 212, 0.04));
   border-radius: 1rem;
   padding: 1.25rem 1.5rem;
-  border: 1px solid rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.15);
   margin-top: 0.5rem;
 }
 
@@ -38,12 +38,12 @@ defineProps<Props>();
 
 .suggestion-header .title {
   font-weight: 600;
-  color: #60a5fa;
+  color: #2563eb;
   font-size: 0.9375rem;
 }
 
 .text {
-  color: rgba(255, 255, 255, 0.85);
+  color: rgba(0, 0, 0, 0.75);
   font-size: 0.9375rem;
   line-height: 1.75;
   margin: 0;

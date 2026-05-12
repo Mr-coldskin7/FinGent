@@ -1,8 +1,10 @@
 """
 测试修复后的数据加载功能
 """
+
 import sys
-sys.path.insert(0, r'E:\FinGent')
+
+sys.path.insert(0, r"E:\FinGent")
 
 from Trade.runner import load_price_dataframe
 
@@ -20,6 +22,7 @@ try:
 except Exception as e:
     print(f"✗ 加载失败: {e}")
     import traceback
+
     traceback.print_exc()
 
 print("\n测试加载 AAPL 2024 年的价格数据...")
@@ -31,4 +34,5 @@ try:
 except Exception as e:
     print(f"✗ 加载失败: {e}")
     import traceback
+
     traceback.print_exc()

@@ -74,8 +74,8 @@
   align-items: center;
   gap: 0.875rem;
   padding: 1rem 1.25rem;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 1.125rem;
   border-top-left-radius: 0.25rem;
   width: fit-content;
@@ -110,13 +110,13 @@
 
 .loading-text {
   font-size: 0.9375rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(0, 0, 0, 0.65);
   font-weight: 500;
 }
 
 .loading-subtitle {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(0, 0, 0, 0.4);
   margin: 0 0 0 0.5rem;
 }
 

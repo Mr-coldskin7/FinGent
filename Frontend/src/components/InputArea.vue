@@ -104,23 +104,23 @@ const handleSend = () => {
 <style scoped>
 .input-area {
   padding: 1.25rem 1.5rem;
-  background: linear-gradient(to top, rgba(2, 6, 23, 0.95), transparent);
+  background: linear-gradient(to top, rgba(248, 250, 252, 0.98), transparent);
 }
 
 .input-wrapper {
   position: relative;
   max-width: 56rem;
   margin: 0 auto;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.9);
   backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 1.125rem;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .input-wrapper.focused {
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15), 0 20px 50px -15px rgba(59, 130, 246, 0.2);
-  border-color: rgba(59, 130, 246, 0.4);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12), 0 20px 50px -15px rgba(59, 130, 246, 0.15);
+  border-color: rgba(59, 130, 246, 0.35);
 }
 
 .input-wrapper.clarification {
@@ -157,7 +157,7 @@ const handleSend = () => {
   width: 2.5rem;
   height: 2.5rem;
   border-radius: 0.625rem;
-  background: rgba(59, 130, 246, 0.12);
+  background: rgba(59, 130, 246, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -173,7 +173,7 @@ const handleSend = () => {
 .textarea {
   flex: 1;
   background: transparent;
-  color: white;
+  color: #1e293b;
   font-size: 0.9375rem;
   line-height: 1.6;
   resize: none;
@@ -186,7 +186,7 @@ const handleSend = () => {
 }
 
 .textarea::placeholder {
-  color: rgba(255, 255, 255, 0.35);
+  color: rgba(0, 0, 0, 0.35);
 }
 
 .textarea:disabled {
@@ -201,8 +201,8 @@ const handleSend = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.4);
+  background: rgba(0, 0, 0, 0.05);
+  color: rgba(0, 0, 0, 0.35);
   border: none;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -253,7 +253,7 @@ const handleSend = () => {
 .hint {
   text-align: center;
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(0, 0, 0, 0.35);
   margin-top: 0.875rem;
   letter-spacing: 0.02em;
 }

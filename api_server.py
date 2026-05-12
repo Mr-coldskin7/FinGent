@@ -10,17 +10,20 @@ import asyncio
 from typing import Optional
 import queue
 import pandas as pd
+
 load_dotenv()
 from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 
 # ========== 初始化 Graph ==========
 from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
-from langchain_community.chat_models import ChatTongyi
+from langchain_openai import ChatOpenAI
 from LLM.preprocess import Preprocessor
 from LLM.router import Router
-from LLM.agent import TECHNICAL_NERD, Morefit
+from LLM.agent import TECHNICAL_NERD, Morefit, RiskManager, SentimentAnalyzer
 from LLM.graph import FinGraph
 from LLM.unified_stock_tools import *
+from LLM.risk_tools import RISK_TOOLS
+from LLM.sentiment_tools import SENTIMENT_TOOLS
 
 # MySQL 持久化 - 使用上下文管理器
 redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -28,46 +31,87 @@ _redis_ctx = AsyncRedisSaver.from_conn_string(redis_url)
 checkpointer = asyncio.run(_redis_ctx.__aenter__())
 
 
-
-model = ChatTongyi(api_key=os.getenv("QIANWEN_API_KEY"), temperature=0.5)
+model = ChatOpenAI(
+    api_key=os.getenv("QIANWEN_API_KEY"),
+    base_url=os.getenv(
+        "MODEL_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    ),
+    model="qwen-max",
+    temperature=0.5,
+)
 
 fin_graph = FinGraph(
     preprocessor=Preprocessor(model, checkpointer),
     router=Router(),
     agent={
-        'TECHNICAL_NERD': TECHNICAL_NERD(model, [get_stock_price, get_stock_basic_info], checkpointer),
-        'Morefit': Morefit(model, [get_stock_company_info, get_stock_financial_report_links, 
-                                   get_stock_financial_statements, get_stock_price, get_stock_basic_info], 
-                          checkpointer)
+        "TECHNICAL_NERD": TECHNICAL_NERD(
+            model,
+            [
+                get_stock_price,
+                get_stock_basic_info,
+                search_financial_knowledge,
+                get_financial_indicator_explanation,
+                bocha_search,
+            ],
+            checkpointer,
+        ),
+        "Morefit": Morefit(
+            model,
+            [
+                get_stock_company_info,
+                get_stock_financial_report_links,
+                get_stock_financial_statements,
+                get_stock_price,
+                get_stock_basic_info,
+                search_financial_knowledge,
+                get_financial_indicator_explanation,
+                bocha_search,
+            ],
+            checkpointer,
+        ),
+        "RiskManager": RiskManager(model, RISK_TOOLS, checkpointer),
+        "SentimentAnalyzer": SentimentAnalyzer(model, SENTIMENT_TOOLS, checkpointer),
     },
-    checkpointer=checkpointer
+    checkpointer=checkpointer,
 )
 
 # 注册关闭钩子（程序退出时清理）
 import atexit
+
+
 @atexit.register
 def cleanup():
-    _redis_ctx.__exit__(None, None, None)
+    try:
+        asyncio.run(_redis_ctx.__aexit__(None, None, None))
+    except Exception:
+        pass
+
 
 # ========== API ==========
 app = FastAPI()
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(
+    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+)
+
 
 class ChatRequest(BaseModel):
     user_input: str
     thread_id: Optional[str] = None
 
+
 @app.post("/api/v1/chat")
 async def chat(req: ChatRequest):
     """直接透传给 Graph.run()"""
-    thread_id = req.thread_id or f"chat_{datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:6]}"
-    
+    thread_id = (
+        req.thread_id or f"chat_{datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:6]}"
+    )
+
     result = await fin_graph.run(req.user_input, thread_id)
-    
+
     print(f"\n{'='*60}")
     print(f"DEBUG: Graph result keys: {list(result.keys())}")
     print(f"{'='*60}\n")
-    
+
     response = {
         "success": True,
         "thread_id": thread_id,
@@ -76,7 +120,7 @@ async def chat(req: ChatRequest):
         "result": result.get("result"),
         "status": result.get("status"),
     }
-    
+
     if result.get("tool_chain"):
         response["tool_chain"] = result["tool_chain"]
     if result.get("agent_name"):
@@ -89,8 +133,171 @@ async def chat(req: ChatRequest):
         response["final_decision"] = result["final_decision"]
     if result.get("detailed_analysis"):
         response["detailed_analysis"] = result["detailed_analysis"]
-    
+
     return response
+
+
+# 热门美股列表
+US_HOT_STOCKS = [
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "AMZN",
+    "TSLA",
+    "NVDA",
+    "META",
+    "NFLX",
+    "AMD",
+    "INTC",
+    "BABA",
+    "JD",
+    "PDD",
+    "TSM",
+    "COIN",
+    "CRM",
+    "ADBE",
+    "UBER",
+    "LYFT",
+    "PLTR",
+]
+
+
+@app.get("/api/v1/market")
+async def get_market(market: str = "zh", limit: int = 50):
+    """
+    获取实时行情数据
+    - market=zh: A股实时行情（按涨跌幅绝对值排序）
+    - market=us: 美股热门股票行情
+    """
+    if market == "zh":
+        return await _get_zh_market(limit)
+    elif market == "us":
+        return await _get_us_market()
+    else:
+        return {"success": False, "error": "不支持的市场类型，请使用 zh 或 us"}
+
+
+async def _get_zh_market(limit: int):
+    """获取A股实时行情"""
+    try:
+        from Data.providers import zh_stock
+
+        df = await zh_stock.recent_stock_list()
+
+        if df is None or df.empty:
+            return {"success": False, "error": "无法获取A股行情数据"}
+
+        # 按涨跌幅绝对值排序，取前N条
+        df = df.copy()
+        df["涨跌幅_绝对值"] = df["涨跌幅"].abs()
+        df = df.sort_values("涨跌幅_绝对值", ascending=False).head(limit)
+
+        stocks = []
+        for _, row in df.iterrows():
+            stocks.append(
+                {
+                    "symbol": str(row.get("代码", "")),
+                    "name": str(row.get("名称", "")),
+                    "price": (
+                        float(row.get("最新价", 0))
+                        if pd.notna(row.get("最新价"))
+                        else 0
+                    ),
+                    "change": (
+                        float(row.get("涨跌额", 0))
+                        if pd.notna(row.get("涨跌额"))
+                        else 0
+                    ),
+                    "changePercent": (
+                        float(row.get("涨跌幅", 0))
+                        if pd.notna(row.get("涨跌幅"))
+                        else 0
+                    ),
+                    "volume": (
+                        int(row.get("成交量", 0)) if pd.notna(row.get("成交量")) else 0
+                    ),
+                    "turnover": (
+                        float(row.get("成交额", 0))
+                        if pd.notna(row.get("成交额"))
+                        else 0
+                    ),
+                    "high": (
+                        float(row.get("最高", 0)) if pd.notna(row.get("最高")) else 0
+                    ),
+                    "low": (
+                        float(row.get("最低", 0)) if pd.notna(row.get("最低")) else 0
+                    ),
+                    "open": (
+                        float(row.get("今开", 0)) if pd.notna(row.get("今开")) else 0
+                    ),
+                    "prevClose": (
+                        float(row.get("昨收", 0)) if pd.notna(row.get("昨收")) else 0
+                    ),
+                }
+            )
+
+        return {"success": True, "market": "zh", "count": len(stocks), "stocks": stocks}
+    except Exception as e:
+        return {"success": False, "error": f"获取A股行情失败: {str(e)}"}
+
+
+async def _get_us_market():
+    """获取美股热门股票行情（通过 Tiingo API）"""
+    try:
+        import httpx
+        from datetime import datetime, timedelta
+
+        token = os.getenv("TIINGO_API_KEY")
+        if not token:
+            return {"success": False, "error": "TIINGO_API_KEY 未配置"}
+
+        # 获取最近 5 天的数据用于计算涨跌幅
+        start_date = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+
+        stocks = []
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            for symbol in US_HOT_STOCKS:
+                try:
+                    url = (
+                        f"https://api.tiingo.com/tiingo/daily/{symbol}/prices"
+                        f"?startDate={start_date}&token={token}"
+                    )
+                    r = await client.get(url)
+                    data = r.json()
+
+                    if not isinstance(data, list) or len(data) < 2:
+                        continue
+
+                    latest = data[-1]
+                    prev = data[-2]
+
+                    price = float(latest.get("close", 0))
+                    prev_close = float(prev.get("close", 0))
+                    change = price - prev_close
+                    change_percent = (change / prev_close * 100) if prev_close else 0
+                    volume = int(latest.get("volume", 0)) if latest.get("volume") else 0
+
+                    stocks.append(
+                        {
+                            "symbol": symbol,
+                            "name": symbol,  # Tiingo 不返回名称，用 symbol 代替
+                            "price": round(price, 2),
+                            "change": round(change, 2),
+                            "changePercent": round(change_percent, 2),
+                            "volume": volume,
+                            "dayHigh": float(latest.get("high", 0)),
+                            "dayLow": float(latest.get("low", 0)),
+                        }
+                    )
+                except Exception:
+                    continue
+
+        # 按涨跌幅绝对值排序
+        stocks.sort(key=lambda x: abs(x["changePercent"]), reverse=True)
+
+        return {"success": True, "market": "us", "count": len(stocks), "stocks": stocks}
+    except Exception as e:
+        return {"success": False, "error": f"获取美股行情失败: {str(e)}"}
 
 
 class BacktestRequest(BaseModel):
@@ -113,53 +320,70 @@ async def backtest(req: BacktestRequest):
     try:
         from Trade.runner import run_backtest_from_symbol
         import asyncio
-        from functools import partial
-        
+
         os.environ["FINGENT_BACKTEST_STRICT"] = "1"
-        
-        temp_model = ChatTongyi(api_key=os.getenv("QIANWEN_API_KEY"), temperature=req.temperature)
-        _temp_mysql_ctx = PyMySQLSaver.from_conn_string(os.getenv("MYSQL_URL", "mysql+pymysql://root:password@localhost:3306/fingent"))
-        temp_checkpointer = _temp_mysql_ctx.__enter__()
-        temp_checkpointer.setup()
-        
+
+        temp_model = ChatOpenAI(
+            api_key=os.getenv("QIANWEN_API_KEY"),
+            base_url=os.getenv(
+                "MODEL_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
+            ),
+            model="qwen-max",
+            temperature=req.temperature,
+        )
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        _redis_ctx = AsyncRedisSaver.from_conn_string(redis_url)
+        temp_checkpointer = await _redis_ctx.__aenter__()
+
         temp_graph = FinGraph(
             preprocessor=Preprocessor(temp_model, temp_checkpointer),
             router=Router(),
             agent={
-                'TECHNICAL_NERD': TECHNICAL_NERD(temp_model, [get_stock_price, get_stock_basic_info], temp_checkpointer),
-                'Morefit': Morefit(temp_model, [get_stock_company_info, get_stock_financial_report_links, 
-                               get_stock_financial_statements, get_stock_price, get_stock_basic_info], 
-                      temp_checkpointer)
+                "TECHNICAL_NERD": TECHNICAL_NERD(
+                    temp_model,
+                    [get_stock_price, get_stock_basic_info],
+                    temp_checkpointer,
+                ),
+                "Morefit": Morefit(
+                    temp_model,
+                    [
+                        get_stock_company_info,
+                        get_stock_financial_report_links,
+                        get_stock_financial_statements,
+                        get_stock_price,
+                        get_stock_basic_info,
+                    ],
+                    temp_checkpointer,
+                ),
             },
-            checkpointer=temp_checkpointer
+            checkpointer=temp_checkpointer,
         )
-        
-        loop = asyncio.get_event_loop()
-        func = partial(run_backtest_from_symbol,
-                       fin_graph=temp_graph,
-                       symbol=req.symbol,
-                       start=req.start,
-                       end=req.end,
-                       initial_cash=req.initial_cash,
-                       commission=req.commission,
-                       slippage_perc=req.slippage,
-                       min_confidence=req.min_confidence,
-                       rebalance_threshold=req.rebalance_threshold,
-                       printlog=(not req.quiet),
-                       audit_path=req.audit_path)
-        result = await loop.run_in_executor(None, func)
-        
+
+        try:
+            result = await run_backtest_from_symbol(
+                fin_graph=temp_graph,
+                symbol=req.symbol,
+                start=req.start,
+                end=req.end,
+                initial_cash=req.initial_cash,
+                commission=req.commission,
+                slippage_perc=req.slippage,
+                min_confidence=req.min_confidence,
+                rebalance_threshold=req.rebalance_threshold,
+                printlog=(not req.quiet),
+                audit_path=req.audit_path,
+            )
+        finally:
+            await _redis_ctx.__aexit__(None, None, None)
+
         return {
             "success": True,
             "result": result,
             "symbol": req.symbol,
-            "period": {"start": req.start, "end": req.end}
+            "period": {"start": req.start, "end": req.end},
         }
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "error": str(e)}
 
 
 # 全局变量用于流式回测
@@ -184,21 +408,24 @@ def is_backtest_cancelled():
     return backtest_cancelled
 
 
-def create_strategy_with_callback(StrategyClass, data_queue, cancel_check_fn=None, **kwargs):
+def create_strategy_with_callback(
+    StrategyClass, data_queue, cancel_check_fn=None, **kwargs
+):
     """创建一个带有回调函数的策略类"""
+
     class CallbackStrategy(StrategyClass):
         def __init__(self):
             super().__init__()
             self.data_queue = data_queue
             self.cancel_check_fn = cancel_check_fn
-        
+
         def on_daily_update(self, state):
             """回调函数：将每日状态推送到队列"""
             try:
                 self.data_queue.put(state, block=False)
             except queue.Full:
                 pass  # 队列满了，丢弃旧数据
-        
+
         def next(self):
             # 检查是否被取消
             if self.cancel_check_fn and self.cancel_check_fn():
@@ -207,7 +434,7 @@ def create_strategy_with_callback(StrategyClass, data_queue, cancel_check_fn=Non
                 return
             # 调用父类的 next
             super().next()
-    
+
     # 复制原策略的参数定义
     CallbackStrategy.params = StrategyClass.params
     return CallbackStrategy
@@ -216,7 +443,7 @@ def create_strategy_with_callback(StrategyClass, data_queue, cancel_check_fn=Non
 @app.post("/api/v1/backtest-stream")
 async def backtest_stream(req: BacktestRequest):
     """流式回测API - 逐日返回结果
-    
+
     SSE 事件格式:
     - event: start - 回测开始
     - event: daily_update - 每日更新
@@ -229,69 +456,98 @@ async def backtest_stream(req: BacktestRequest):
     import threading
     from Trade.runner import GraphSignalStrategy, load_price_dataframe
     import backtrader as bt
-    
+
     # 重置取消状态
     reset_backtest_state()
-    
+
     # 创建队列用于线程间通信
     global backtest_queue
     backtest_queue = queue.Queue(maxsize=1000)
-    result_holder = {'strategy': None, 'start_value': 0, 'end_value': 0, 
-                     'analyzers': {}, 'error': None, 'done': False}
-    
+    result_holder = {
+        "strategy": None,
+        "start_value": 0,
+        "end_value": 0,
+        "analyzers": {},
+        "error": None,
+        "done": False,
+    }
+
     def run_backtest():
         """在后台线程中运行回测"""
         global backtest_cancelled, backtest_done, backtest_error
         try:
             os.environ["FINGENT_BACKTEST_STRICT"] = "1"
-            
+
             print(f"[StreamBacktest] 加载 {req.symbol} 数据...")
-            data = load_price_dataframe(symbol=req.symbol, start=req.start, end=req.end)
+            data = asyncio.run(
+                load_price_dataframe(symbol=req.symbol, start=req.start, end=req.end)
+            )
             print(f"[StreamBacktest] 加载完成: {len(data)} 条")
-            
+
             # 检查是否已取消
             if backtest_cancelled:
                 print(f"[StreamBacktest] 回测在启动前被取消")
                 backtest_done = True
                 return
-            
-            temp_model = ChatTongyi(api_key=os.getenv("QIANWEN_API_KEY"), temperature=req.temperature)
+
+            temp_model = ChatOpenAI(
+                api_key=os.getenv("QIANWEN_API_KEY"),
+                base_url=os.getenv(
+                    "MODEL_BASE_URL",
+                    "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                ),
+                model="qwen-max",
+                temperature=req.temperature,
+            )
             redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
             _redis_ctx = AsyncRedisSaver.from_conn_string(redis_url)
             temp_checkpointer = asyncio.run(_redis_ctx.__aenter__())
 
-            
             temp_graph = FinGraph(
                 preprocessor=Preprocessor(temp_model, temp_checkpointer),
                 router=Router(),
                 agent={
-                    'TECHNICAL_NERD': TECHNICAL_NERD(temp_model, [get_stock_price, get_stock_basic_info], temp_checkpointer),
-                    'Morefit': Morefit(temp_model, [get_stock_company_info, get_stock_financial_report_links, 
-                                   get_stock_financial_statements, get_stock_price, get_stock_basic_info], 
-                          temp_checkpointer)
+                    "TECHNICAL_NERD": TECHNICAL_NERD(
+                        temp_model,
+                        [get_stock_price, get_stock_basic_info],
+                        temp_checkpointer,
+                    ),
+                    "Morefit": Morefit(
+                        temp_model,
+                        [
+                            get_stock_company_info,
+                            get_stock_financial_report_links,
+                            get_stock_financial_statements,
+                            get_stock_price,
+                            get_stock_basic_info,
+                        ],
+                        temp_checkpointer,
+                    ),
                 },
-                checkpointer=temp_checkpointer
+                checkpointer=temp_checkpointer,
             )
-            
+
             cerebro = bt.Cerebro()
             cerebro.broker.setcash(req.initial_cash)
             cerebro.broker.setcommission(commission=req.commission)
             if req.slippage > 0:
                 cerebro.broker.set_slippage_perc(req.slippage)
-            
+
             feed = bt.feeds.PandasData(dataname=data)
             cerebro.adddata(feed, name=req.symbol)
-            
+
             cerebro.addanalyzer(bt.analyzers.DrawDown, _name="drawdown")
             cerebro.addanalyzer(bt.analyzers.Returns, _name="returns")
             cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name="sharpe")
             cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="trades")
-            
+
             # 创建带回调的策略类，传入取消检查函数
             CallbackStrategy = create_strategy_with_callback(
-                GraphSignalStrategy, backtest_queue, cancel_check_fn=is_backtest_cancelled
+                GraphSignalStrategy,
+                backtest_queue,
+                cancel_check_fn=is_backtest_cancelled,
             )
-            
+
             cerebro.addstrategy(
                 CallbackStrategy,
                 graph=temp_graph,
@@ -299,31 +555,31 @@ async def backtest_stream(req: BacktestRequest):
                 min_confidence=req.min_confidence,
                 rebalance_threshold=req.rebalance_threshold,
                 printlog=True,
-                audit_path=req.audit_path
+                audit_path=req.audit_path,
             )
-            
-            result_holder['start_value'] = float(cerebro.broker.getvalue())
+
+            result_holder["start_value"] = float(cerebro.broker.getvalue())
             print(f"[StreamBacktest] 开始运行回测...")
-            
+
             # 检查是否已取消
             if backtest_cancelled:
                 print(f"[StreamBacktest] 回测在运行前被取消")
                 backtest_done = True
                 return
-            
+
             results = cerebro.run()
-            
+
             if backtest_cancelled:
                 print(f"[StreamBacktest] 回测被取消")
             else:
                 print(f"[StreamBacktest] 回测完成!")
-            
+
             if results:
                 strategy = results[0]
-                result_holder['strategy'] = strategy
-                result_holder['end_value'] = float(cerebro.broker.getvalue())
+                result_holder["strategy"] = strategy
+                result_holder["end_value"] = float(cerebro.broker.getvalue())
                 try:
-                    result_holder['analyzers'] = {
+                    result_holder["analyzers"] = {
                         "drawdown": strategy.analyzers.drawdown.get_analysis(),
                         "returns": strategy.analyzers.returns.get_analysis(),
                         "sharpe": strategy.analyzers.sharpe.get_analysis(),
@@ -331,25 +587,25 @@ async def backtest_stream(req: BacktestRequest):
                     }
                 except:
                     pass
-            
-            result_holder['done'] = True
-            
+
+            result_holder["done"] = True
+
         except Exception as e:
             print(f"[StreamBacktest] 错误: {e}")
             import traceback
-            traceback.print_exc()
-            result_holder['error'] = str(e)
-            result_holder['done'] = True
 
+            traceback.print_exc()
+            result_holder["error"] = str(e)
+            result_holder["done"] = True
 
     async def event_generator():
         """生成器：从队列读取数据并yield"""
         global backtest_cancelled
-        
+
         # 启动后台线程
         thread = threading.Thread(target=run_backtest)
         thread.start()
-        
+
         # 发送开始事件
         # 计算总天数
         total_days_estimate = 252  # 默认252个交易日
@@ -360,136 +616,168 @@ async def backtest_stream(req: BacktestRequest):
                 total_days_estimate = len(pd.bdate_range(start_date, end_date))
             except:
                 pass
-        
+
         yield {
             "event": "start",
-            "data": json.dumps({
-                "symbol": req.symbol,
-                "message": "回测开始",
-                "period": {"start": req.start, "end": req.end},
-                "total_days": total_days_estimate
-            }, ensure_ascii=False)
+            "data": json.dumps(
+                {
+                    "symbol": req.symbol,
+                    "message": "回测开始",
+                    "period": {"start": req.start, "end": req.end},
+                    "total_days": total_days_estimate,
+                },
+                ensure_ascii=False,
+            ),
         }
-        
+
         total_days = 0
         max_wait = 7200  # 120分钟超时（回测可能需要很长时间）
         waited = 0
         last_data_time = asyncio.get_event_loop().time()  # 记录最后收到数据的时间
-        
+
         # 循环读取队列数据
-        while not result_holder['done'] or not backtest_queue.empty():
+        while not result_holder["done"] or not backtest_queue.empty():
             # 检查是否被取消
             if backtest_cancelled:
                 print("[StreamBacktest] 检测到取消信号，停止事件生成")
                 yield {
                     "event": "cancelled",
-                    "data": json.dumps({
-                        "message": "回测已取消",
-                        "total_days": total_days
-                    }, ensure_ascii=False)
+                    "data": json.dumps(
+                        {"message": "回测已取消", "total_days": total_days},
+                        ensure_ascii=False,
+                    ),
                 }
                 return
-            
+
             try:
                 # 非阻塞获取数据
                 state = backtest_queue.get(block=False)
                 total_days += 1
-                
+
                 # 构建每日结果 - 包含OHLCV和信号信息
                 daily_result = {
                     "date": str(state["date"]),
                     "cash": float(state["cash"]),
                     "portfolio_value": float(state["portfolio_value"]),
-                    "position_size": int(state["position_size"]) if state["position_size"] is not None else 0,
-                    "avg_cost": float(state["avg_cost"]) if state["avg_cost"] is not None else 0,
+                    "position_size": (
+                        int(state["position_size"])
+                        if state["position_size"] is not None
+                        else 0
+                    ),
+                    "avg_cost": (
+                        float(state["avg_cost"]) if state["avg_cost"] is not None else 0
+                    ),
                     # OHLCV 数据
                     "open_price": float(state.get("open_price", state["close_price"])),
                     "high_price": float(state.get("high_price", state["close_price"])),
                     "low_price": float(state.get("low_price", state["close_price"])),
                     "close_price": float(state["close_price"]),
                     "volume": float(state.get("volume", 0)),
-                    "day_number": total_days
+                    "day_number": total_days,
                 }
-                
+
                 # 如果有信号信息，添加到结果中
-                print(f"[StreamBacktest] Day {total_days}: signal in state={'signal' in state}, state['signal']={state.get('signal')}")
+                print(
+                    f"[StreamBacktest] Day {total_days}: signal in state={'signal' in state}, state['signal']={state.get('signal')}"
+                )
                 if "signal" in state and state["signal"]:
                     daily_result["signal"] = {
                         "vote": state["signal"].get("vote", ""),
                         "confidence": float(state["signal"].get("confidence", 0)),
-                        "target_position_pct": float(state["signal"].get("target_position_pct", 0)),
-                        "reason": state["signal"].get("reason", "")
+                        "target_position_pct": float(
+                            state["signal"].get("target_position_pct", 0)
+                        ),
+                        "reason": state["signal"].get("reason", ""),
                     }
-                    print(f"[StreamBacktest] Day {total_days}: signal={daily_result['signal']}")
-                
+                    print(
+                        f"[StreamBacktest] Day {total_days}: signal={daily_result['signal']}"
+                    )
+
                 yield {
                     "event": "daily_update",
-                    "data": json.dumps(daily_result, ensure_ascii=False, default=str)
+                    "data": json.dumps(daily_result, ensure_ascii=False, default=str),
                 }
-                
+
                 # 更新最后收到数据的时间
                 last_data_time = asyncio.get_event_loop().time()
-                
+
                 # 让出控制权，确保数据及时发送
                 await asyncio.sleep(0.01)
-                
+
             except queue.Empty:
                 # 队列为空，等待一下
-                if not result_holder['done']:
+                if not result_holder["done"]:
                     await asyncio.sleep(0.1)
                     waited += 0.1
-                    
+
                     # 检查是否长时间没有收到数据（可能是卡住了）
-                    time_since_last_data = asyncio.get_event_loop().time() - last_data_time
+                    time_since_last_data = (
+                        asyncio.get_event_loop().time() - last_data_time
+                    )
                     if time_since_last_data > 300:  # 5分钟没有数据
-                        print(f"[StreamBacktest] 警告: {time_since_last_data:.0f}秒没有收到数据")
+                        print(
+                            f"[StreamBacktest] 警告: {time_since_last_data:.0f}秒没有收到数据"
+                        )
                         # 发送心跳保持连接
                         yield {
                             "event": "ping",
-                            "data": json.dumps({"status": "waiting", "elapsed": time_since_last_data}, ensure_ascii=False)
+                            "data": json.dumps(
+                                {"status": "waiting", "elapsed": time_since_last_data},
+                                ensure_ascii=False,
+                            ),
                         }
                         last_data_time = asyncio.get_event_loop().time()  # 重置时间
-                    
+
                     if waited > max_wait:
                         yield {
                             "event": "error",
-                            "data": json.dumps({"error": f"回测执行超时（{max_wait/60:.0f}分钟）"}, ensure_ascii=False)
+                            "data": json.dumps(
+                                {"error": f"回测执行超时（{max_wait/60:.0f}分钟）"},
+                                ensure_ascii=False,
+                            ),
                         }
                         return
-        
+
         # 等待线程结束
         thread.join(timeout=5)
-        
+
         # 发送最终结果
         if backtest_cancelled:
             # 回测被取消，不发送最终结果
             print("[StreamBacktest] 回测已被取消，跳过最终结果")
-        elif result_holder['error']:
+        elif result_holder["error"]:
             yield {
                 "event": "error",
-                "data": json.dumps({"error": result_holder['error']}, ensure_ascii=False)
+                "data": json.dumps(
+                    {"error": result_holder["error"]}, ensure_ascii=False
+                ),
             }
-        elif result_holder['strategy']:
+        elif result_holder["strategy"]:
             final_result = {
                 "symbol": req.symbol,
-                "start_value": result_holder['start_value'],
-                "end_value": result_holder['end_value'],
-                "pnl": result_holder['end_value'] - result_holder['start_value'],
-                "return_pct": ((result_holder['end_value'] / result_holder['start_value']) - 1.0) * 100.0 if result_holder['start_value'] else 0.0,
-                "last_signal": result_holder['strategy'].last_signal,
+                "start_value": result_holder["start_value"],
+                "end_value": result_holder["end_value"],
+                "pnl": result_holder["end_value"] - result_holder["start_value"],
+                "return_pct": (
+                    ((result_holder["end_value"] / result_holder["start_value"]) - 1.0)
+                    * 100.0
+                    if result_holder["start_value"]
+                    else 0.0
+                ),
+                "last_signal": result_holder["strategy"].last_signal,
                 "total_days": total_days,
-                "analyzers": result_holder['analyzers']
+                "analyzers": result_holder["analyzers"],
             }
-            
+
             yield {
                 "event": "final_result",
-                "data": json.dumps(final_result, ensure_ascii=False, default=str)
+                "data": json.dumps(final_result, ensure_ascii=False, default=str),
             }
-    
+
     return EventSourceResponse(
         event_generator(),
         ping=15,  # 每15秒发送一次ping保持连接
-        ping_message_factory=lambda: {"event": "ping", "data": "{}"}
+        ping_message_factory=lambda: {"event": "ping", "data": "{}"},
     )
 
 
@@ -501,21 +789,20 @@ async def cancel_backtest():
     global backtest_cancelled
     backtest_cancelled = True
     print("[Backtest] 收到取消请求")
-    return {
-        "success": True,
-        "message": "回测取消信号已发送"
-    }
+    return {"success": True, "message": "回测取消信号已发送"}
 
 
 @app.get("/api/v1/backtest-chart")
-async def get_backtest_chart(audit_path: str = "Trade/backtest_audit.jsonl", symbol: str = "STOCK"):
+async def get_backtest_chart(
+    audit_path: str = "Trade/backtest_audit.jsonl", symbol: str = "STOCK"
+):
     """
     获取回测图表数据，用于前端可视化
-    
+
     参数:
         audit_path: 回测审计文件路径
         symbol: 股票代码
-    
+
     返回:
         {
             "symbol": "NVDA",
@@ -525,11 +812,16 @@ async def get_backtest_chart(audit_path: str = "Trade/backtest_audit.jsonl", sym
         }
     """
     import os
+
     print(f"[ChartAPI] 请求图表数据: symbol={symbol}, audit_path={audit_path}")
-    
+
     try:
-        from Trade.visualizer import parse_backtest_audit, extract_trades_and_signals, generate_chart_data
-        
+        from Trade.visualizer import (
+            parse_backtest_audit,
+            extract_trades_and_signals,
+            generate_chart_data,
+        )
+
         # 检查文件是否存在
         if not os.path.exists(audit_path):
             # 尝试其他路径
@@ -537,53 +829,52 @@ async def get_backtest_chart(audit_path: str = "Trade/backtest_audit.jsonl", sym
                 f"Trade/{audit_path}",
                 audit_path.replace("Trade/", ""),
                 os.path.join("Trade", "backtest_audit.jsonl"),
-                "backtest_audit.jsonl"
+                "backtest_audit.jsonl",
             ]
             for alt_path in alt_paths:
                 if os.path.exists(alt_path):
                     audit_path = alt_path
                     print(f"[ChartAPI] 使用替代路径: {audit_path}")
                     break
-        
-        print(f"[ChartAPI] 最终审计文件路径: {audit_path}, 存在: {os.path.exists(audit_path)}")
-        
+
+        print(
+            f"[ChartAPI] 最终审计文件路径: {audit_path}, 存在: {os.path.exists(audit_path)}"
+        )
+
         # 解析回测数据
         records = parse_backtest_audit(audit_path)
         print(f"[ChartAPI] 解析到 {len(records)} 条记录")
-        
+
         if not records:
             return {
                 "success": False,
-                "error": f"没有找到回测数据，请先运行回测 (路径: {audit_path})"
+                "error": f"没有找到回测数据，请先运行回测 (路径: {audit_path})",
             }
-        
+
         # 提取交易信息
         daily_records, trades = extract_trades_and_signals(records)
         print(f"[ChartAPI] 提取到 {len(daily_records)} 日记录, {len(trades)} 笔交易")
-        
+
         # 生成图表数据
         chart_data = generate_chart_data(daily_records, trades, symbol)
         print(f"[ChartAPI] 生成图表数据: {len(chart_data.get('candles', []))} 根K线")
-        
-        return {
-            "success": True,
-            "data": chart_data
-        }
-        
+
+        return {"success": True, "data": chart_data}
+
     except Exception as e:
         import traceback
+
         print(f"[ChartAPI] 错误: {e}")
         traceback.print_exc()
-        return {
-            "success": False,
-            "error": str(e)
-        }
+        return {"success": False, "error": str(e)}
 
 
 @app.get("/health")
-async def health(): 
+async def health():
     return {"ok": True}
+
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)

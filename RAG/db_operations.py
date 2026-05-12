@@ -5,6 +5,7 @@ import torch
 
 # =============================================================================
 import os
+
 # 获取当前文件所在目录（RAG/）
 RAG_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(RAG_DIR)

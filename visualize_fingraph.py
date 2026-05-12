@@ -12,10 +12,11 @@ load_dotenv()
 # 方法1: LangGraph 自带 Mermaid 图（最简单，推荐）
 # ============================================================
 
+
 def visualize_mermaid():
     """生成 Mermaid 格式的流程图"""
     from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
-    from langchain_community.chat_models import ChatTongyi
+    from langchain_openai import ChatOpenAI
     from LLM.preprocess import Preprocessor
     from LLM.router import Router
     from LLM.agent import TECHNICAL_NERD, Morefit
@@ -27,22 +28,31 @@ def visualize_mermaid():
         get_stock_financial_report_links,
         get_stock_financial_statements,
     )
-    
+
     # 初始化组件
-    _mysql_saver_ctx = PyMySQLSaver.from_conn_string(os.getenv("MYSQL_URL", "mysql+pymysql://root:password@localhost:3306/fingent"))
+    _mysql_saver_ctx = PyMySQLSaver.from_conn_string(
+        os.getenv("MYSQL_URL", "mysql+pymysql://root:password@localhost:3306/fingent")
+    )
     checkpointer = _mysql_saver_ctx.__enter__()
     checkpointer.setup()
-    model = ChatTongyi(api_key=os.getenv("QIANWEN_API_KEY"), temperature=0.3)
-    
+    model = ChatOpenAI(
+        api_key=os.getenv("QIANWEN_API_KEY"),
+        base_url=os.getenv(
+            "MODEL_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
+        ),
+        model="qwen-max",
+        temperature=0.3,
+    )
+
     preprocessor = Preprocessor(model, checkpointer)
     router = Router()
-    
+
     tech_agent = TECHNICAL_NERD(
         model=model,
         tools=[get_stock_price, get_stock_basic_info],
-        checkpointer=checkpointer
+        checkpointer=checkpointer,
     )
-    
+
     morefit_agent = Morefit(
         model=model,
         tools=[
@@ -50,24 +60,21 @@ def visualize_mermaid():
             get_stock_financial_report_links,
             get_stock_financial_statements,
             get_stock_price,
-            get_stock_basic_info
+            get_stock_basic_info,
         ],
-        checkpointer=checkpointer
+        checkpointer=checkpointer,
     )
-    
+
     fin_graph = FinGraph(
         preprocessor=preprocessor,
         router=router,
-        agent={
-            'TECHNICAL_NERD': tech_agent,
-            'Morefit': morefit_agent
-        },
-        checkpointer=checkpointer
+        agent={"TECHNICAL_NERD": tech_agent, "Morefit": morefit_agent},
+        checkpointer=checkpointer,
     )
-    
+
     # 生成 Mermaid 图
     mermaid_code = fin_graph.graph.get_graph().draw_mermaid()
-    
+
     print("=" * 60)
     print("FinGraph Mermaid 流程图")
     print("=" * 60)
@@ -75,13 +82,14 @@ def visualize_mermaid():
     print("\n" + "=" * 60)
     print("提示：将上述代码粘贴到 https://mermaid.live/ 查看图形")
     print("=" * 60)
-    
+
     return mermaid_code
 
 
 # ============================================================
 # 方法2: Graphviz 可视化（更美观，可导出图片）
 # ============================================================
+
 
 def visualize_graphviz():
     """使用 Graphviz 绘制流程图（需要先安装 graphviz: pip install graphviz）"""
@@ -91,70 +99,79 @@ def visualize_graphviz():
         print("请先安装 graphviz: pip install graphviz")
         print("同时需要安装系统 graphviz: https://graphviz.org/download/")
         return None
-    
-    dot = Digraph(comment='FinGraph Architecture', format='png')
-    dot.attr(rankdir='TB', size='12,10', dpi='150')
-    
+
+    dot = Digraph(comment="FinGraph Architecture", format="png")
+    dot.attr(rankdir="TB", size="12,10", dpi="150")
+
     # 设置节点样式
-    dot.attr('node', shape='box', style='rounded,filled', fontname='Microsoft YaHei')
-    
+    dot.attr("node", shape="box", style="rounded,filled", fontname="Microsoft YaHei")
+
     # 开始节点
-    dot.node('start', 'START', fillcolor='#90EE90', shape='ellipse')
-    
+    dot.node("start", "START", fillcolor="#90EE90", shape="ellipse")
+
     # 预处理节点
-    dot.node('preprocess', 'Preprocessor\n(输入解析)', fillcolor='#87CEEB')
-    
+    dot.node("preprocess", "Preprocessor\n(输入解析)", fillcolor="#87CEEB")
+
     # 路由节点
-    dot.node('route', 'Router\n(意图路由)', fillcolor='#FFD700')
-    
+    dot.node("route", "Router\n(意图路由)", fillcolor="#FFD700")
+
     # 两个 Agent 节点
-    dot.node('tech', 'TECHNICAL_NERD\n(技术面分析)\n基于价格和指标', 
-             fillcolor='#DDA0DD', shape='box3d')
-    dot.node('fund', 'Morefit\n(基本面分析)\n基于财报和估值', 
-             fillcolor='#98FB98', shape='box3d')
-    
+    dot.node(
+        "tech",
+        "TECHNICAL_NERD\n(技术面分析)\n基于价格和指标",
+        fillcolor="#DDA0DD",
+        shape="box3d",
+    )
+    dot.node(
+        "fund",
+        "Morefit\n(基本面分析)\n基于财报和估值",
+        fillcolor="#98FB98",
+        shape="box3d",
+    )
+
     # 双 Agent 模式
-    dot.node('all', 'ALL Mode\n(双Agent并行)', fillcolor='#F0A0A0')
-    dot.node('voting', 'Voting\n(投票汇总)', fillcolor='#FFA500')
-    
+    dot.node("all", "ALL Mode\n(双Agent并行)", fillcolor="#F0A0A0")
+    dot.node("voting", "Voting\n(投票汇总)", fillcolor="#FFA500")
+
     # 澄清节点
-    dot.node('clarify', 'Clarify\n(澄清节点)', fillcolor='#FFB6C1')
-    
+    dot.node("clarify", "Clarify\n(澄清节点)", fillcolor="#FFB6C1")
+
     # 结束节点
-    dot.node('end', 'END', fillcolor='#FF6B6B', shape='ellipse')
-    
+    dot.node("end", "END", fillcolor="#FF6B6B", shape="ellipse")
+
     # 添加边
-    dot.edge('start', 'preprocess')
-    dot.edge('preprocess', 'route')
-    
+    dot.edge("start", "preprocess")
+    dot.edge("preprocess", "route")
+
     # 路由分支
-    dot.edge('route', 'tech', label='技术面请求')
-    dot.edge('route', 'fund', label='基本面请求')
-    dot.edge('route', 'all', label='回测/综合')
-    dot.edge('route', 'clarify', label='需要澄清', style='dashed')
-    
+    dot.edge("route", "tech", label="技术面请求")
+    dot.edge("route", "fund", label="基本面请求")
+    dot.edge("route", "all", label="回测/综合")
+    dot.edge("route", "clarify", label="需要澄清", style="dashed")
+
     # 单 Agent 直接结束
-    dot.edge('tech', 'end')
-    dot.edge('fund', 'end')
-    
+    dot.edge("tech", "end")
+    dot.edge("fund", "end")
+
     # 双 Agent 流程
-    dot.edge('all', 'voting')
-    dot.edge('voting', 'end')
-    
+    dot.edge("all", "voting")
+    dot.edge("voting", "end")
+
     # 澄清后重新路由（简化表示）
-    dot.edge('clarify', 'end', style='dashed', label='等待用户')
-    
+    dot.edge("clarify", "end", style="dashed", label="等待用户")
+
     # 保存并渲染
-    output_path = 'fingraph_architecture'
+    output_path = "fingraph_architecture"
     dot.render(output_path, cleanup=True)
     print(f"Graphviz 图已保存: {output_path}.png")
-    
+
     return dot
 
 
 # ============================================================
 # 方法3: Matplotlib + NetworkX（网络拓扑图）
 # ============================================================
+
 
 def visualize_networkx():
     """使用 NetworkX 和 Matplotlib 绘制网络图"""
@@ -165,98 +182,156 @@ def visualize_networkx():
     except ImportError:
         print("请先安装: pip install matplotlib networkx")
         return None
-    
+
     # 设置中文字体（解决乱码问题）
-    plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
-    plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
-    
+    plt.rcParams["font.sans-serif"] = [
+        "SimHei",
+        "Microsoft YaHei",
+        "Arial Unicode MS",
+        "DejaVu Sans",
+    ]
+    plt.rcParams["axes.unicode_minus"] = False  # 解决负号显示问题
+
     # 创建有向图
     G = nx.DiGraph()
-    
+
     # 添加节点
     nodes = {
-        'START': {'pos': (0, 4), 'color': '#90EE90'},
-        'Preprocessor': {'pos': (0, 3), 'color': '#87CEEB'},
-        'Router': {'pos': (0, 2), 'color': '#FFD700'},
-        'TECHNICAL\n_NERD': {'pos': (-2, 1), 'color': '#DDA0DD'},
-        'Morefit': {'pos': (2, 1), 'color': '#98FB98'},
-        'ALL Mode': {'pos': (0, 1), 'color': '#F0A0A0'},
-        'Voting': {'pos': (0, 0), 'color': '#FFA500'},
-        'Clarify': {'pos': (3, 2), 'color': '#FFB6C1'},
-        'END': {'pos': (0, -1), 'color': '#FF6B6B'},
+        "START": {"pos": (0, 4), "color": "#90EE90"},
+        "Preprocessor": {"pos": (0, 3), "color": "#87CEEB"},
+        "Router": {"pos": (0, 2), "color": "#FFD700"},
+        "TECHNICAL\n_NERD": {"pos": (-2, 1), "color": "#DDA0DD"},
+        "Morefit": {"pos": (2, 1), "color": "#98FB98"},
+        "ALL Mode": {"pos": (0, 1), "color": "#F0A0A0"},
+        "Voting": {"pos": (0, 0), "color": "#FFA500"},
+        "Clarify": {"pos": (3, 2), "color": "#FFB6C1"},
+        "END": {"pos": (0, -1), "color": "#FF6B6B"},
     }
-    
+
     for node, attrs in nodes.items():
         G.add_node(node, **attrs)
-    
+
     # 添加边
     edges = [
-        ('START', 'Preprocessor'),
-        ('Preprocessor', 'Router'),
-        ('Router', 'TECHNICAL\n_NERD'),
-        ('Router', 'Morefit'),
-        ('Router', 'ALL Mode'),
-        ('Router', 'Clarify'),
-        ('TECHNICAL\n_NERD', 'END'),
-        ('Morefit', 'END'),
-        ('ALL Mode', 'Voting'),
-        ('Voting', 'END'),
+        ("START", "Preprocessor"),
+        ("Preprocessor", "Router"),
+        ("Router", "TECHNICAL\n_NERD"),
+        ("Router", "Morefit"),
+        ("Router", "ALL Mode"),
+        ("Router", "Clarify"),
+        ("TECHNICAL\n_NERD", "END"),
+        ("Morefit", "END"),
+        ("ALL Mode", "Voting"),
+        ("Voting", "END"),
     ]
     G.add_edges_from(edges)
-    
+
     # 绘制
     fig, ax = plt.subplots(figsize=(12, 8))
-    
+
     # 获取位置
-    pos = {node: attrs['pos'] for node, attrs in nodes.items()}
-    colors = [attrs['color'] for node, attrs in nodes.items()]
-    
+    pos = {node: attrs["pos"] for node, attrs in nodes.items()}
+    colors = [attrs["color"] for node, attrs in nodes.items()]
+
     # 绘制节点
-    nx.draw_networkx_nodes(G, pos, node_color=colors, 
-                          node_size=4000, alpha=0.9, ax=ax)
-    
+    nx.draw_networkx_nodes(G, pos, node_color=colors, node_size=4000, alpha=0.9, ax=ax)
+
     # 绘制边
-    nx.draw_networkx_edges(G, pos, edge_color='gray', 
-                          arrows=True, arrowsize=20, 
-                          arrowstyle='->', width=2, ax=ax)
-    
+    nx.draw_networkx_edges(
+        G,
+        pos,
+        edge_color="gray",
+        arrows=True,
+        arrowsize=20,
+        arrowstyle="->",
+        width=2,
+        ax=ax,
+    )
+
     # 绘制标签
-    nx.draw_networkx_labels(G, pos, font_size=10, 
-                           font_family='sans-serif', ax=ax)
-    
+    nx.draw_networkx_labels(G, pos, font_size=10, font_family="sans-serif", ax=ax)
+
     # 添加标题
-    ax.set_title('FinGraph 系统架构图', fontsize=16, fontweight='bold', pad=20)
-    ax.axis('off')
-    
+    ax.set_title("FinGraph 系统架构图", fontsize=16, fontweight="bold", pad=20)
+    ax.axis("off")
+
     # 添加图例
     legend_elements = [
-        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#90EE90', 
-                  markersize=12, label='开始/结束'),
-        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#87CEEB', 
-                  markersize=12, label='预处理'),
-        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#FFD700', 
-                  markersize=12, label='路由'),
-        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#DDA0DD', 
-                  markersize=12, label='技术面Agent'),
-        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#98FB98', 
-                  markersize=12, label='基本面Agent'),
-        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#FFA500', 
-                  markersize=12, label='投票决策'),
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="#90EE90",
+            markersize=12,
+            label="开始/结束",
+        ),
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="#87CEEB",
+            markersize=12,
+            label="预处理",
+        ),
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="#FFD700",
+            markersize=12,
+            label="路由",
+        ),
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="#DDA0DD",
+            markersize=12,
+            label="技术面Agent",
+        ),
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="#98FB98",
+            markersize=12,
+            label="基本面Agent",
+        ),
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor="#FFA500",
+            markersize=12,
+            label="投票决策",
+        ),
     ]
-    ax.legend(handles=legend_elements, loc='upper right', fontsize=9)
-    
+    ax.legend(handles=legend_elements, loc="upper right", fontsize=9)
+
     plt.tight_layout()
-    plt.savefig('fingraph_networkx.png', dpi=150, bbox_inches='tight', 
-                facecolor='white', edgecolor='none')
+    plt.savefig(
+        "fingraph_networkx.png",
+        dpi=150,
+        bbox_inches="tight",
+        facecolor="white",
+        edgecolor="none",
+    )
     print("网络图已保存: fingraph_networkx.png")
     plt.show()
-    
+
     return G
 
 
 # ============================================================
 # 方法4: ASCII 艺术图（命令行快速预览）
 # ============================================================
+
 
 def visualize_ascii():
     """ASCII 艺术图，适合命令行快速查看"""
@@ -323,7 +398,7 @@ def visualize_ascii():
 
 if __name__ == "__main__":
     import sys
-    
+
     print("=" * 60)
     print("FinGraph 可视化工具")
     print("=" * 60)
@@ -335,9 +410,9 @@ if __name__ == "__main__":
     print("5. all      - 运行所有可用的方法")
     print("\n用法: python visualize_fingraph.py [方法名]")
     print("=" * 60)
-    
+
     method = sys.argv[1] if len(sys.argv) > 1 else "ascii"
-    
+
     if method == "mermaid":
         visualize_mermaid()
     elif method == "graphviz":

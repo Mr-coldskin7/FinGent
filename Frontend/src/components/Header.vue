@@ -27,8 +27,8 @@ defineProps<Props>();
 <style scoped>
 .header {
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(2, 6, 23, 0.6);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(20px);
 }
 
@@ -69,7 +69,7 @@ defineProps<Props>();
 
 .brand-tagline {
   font-size: 0.6875rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.45);
   letter-spacing: 0.05em;
 }
 
@@ -78,22 +78,22 @@ defineProps<Props>();
   align-items: center;
   gap: 0.5rem;
   padding: 0.375rem 0.875rem;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.04);
   border-radius: 9999px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .thread-label {
   font-size: 0.625rem;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.45);
   letter-spacing: 0.1em;
   font-weight: 600;
 }
 
 .thread-id {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(0, 0, 0, 0.65);
   font-family: monospace;
   letter-spacing: 0.05em;
 }

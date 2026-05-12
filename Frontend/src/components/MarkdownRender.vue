@@ -25,7 +25,7 @@ const renderedHtml = computed(() => {
 
 <style scoped>
 .markdown-body {
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(0, 0, 0, 0.85);
   font-size: 0.9375rem;
   line-height: 1.8;
 }
@@ -34,7 +34,7 @@ const renderedHtml = computed(() => {
 .markdown-body :deep(h2),
 .markdown-body :deep(h3),
 .markdown-body :deep(h4) {
-  color: white;
+  color: #1e293b;
   margin-top: 1.5rem;
   margin-bottom: 0.75rem;
   font-weight: 600;
@@ -42,7 +42,7 @@ const renderedHtml = computed(() => {
 
 .markdown-body :deep(h1) {
   font-size: 1.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   padding-bottom: 0.5rem;
 }
 
@@ -63,18 +63,18 @@ const renderedHtml = computed(() => {
 }
 
 .markdown-body :deep(strong) {
-  color: #60a5fa;
+  color: #2563eb;
   font-weight: 600;
 }
 
 .markdown-body :deep(em) {
-  color: #fbbf24;
+  color: #d97706;
   font-style: italic;
 }
 
 .markdown-body :deep(hr) {
   border: none;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
   margin: 1.5rem 0;
 }
 
@@ -89,16 +89,16 @@ const renderedHtml = computed(() => {
 }
 
 .markdown-body :deep(code) {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.05);
   padding: 0.2rem 0.4rem;
   border-radius: 0.25rem;
   font-family: monospace;
   font-size: 0.875em;
-  color: #fbbf24;
+  color: #d97706;
 }
 
 .markdown-body :deep(pre) {
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.05);
   padding: 1rem;
   border-radius: 0.5rem;
   overflow-x: auto;
@@ -108,19 +108,19 @@ const renderedHtml = computed(() => {
 .markdown-body :deep(pre code) {
   background: none;
   padding: 0;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(0, 0, 0, 0.8);
 }
 
 .markdown-body :deep(blockquote) {
-  border-left: 3px solid #60a5fa;
+  border-left: 3px solid #3b82f6;
   padding-left: 1rem;
   margin-left: 0;
   margin-bottom: 1rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(0, 0, 0, 0.7);
 }
 
 .markdown-body :deep(a) {
-  color: #60a5fa;
+  color: #2563eb;
   text-decoration: none;
 }
 
@@ -138,11 +138,11 @@ const renderedHtml = computed(() => {
 .markdown-body :deep(td) {
   padding: 0.625rem;
   text-align: left;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .markdown-body :deep(th) {
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(0, 0, 0, 0.6);
   font-weight: 600;
 }
 </style>

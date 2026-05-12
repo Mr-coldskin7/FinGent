@@ -82,7 +82,7 @@ const handleClick = (prompt: string) => {
   width: 80px;
   height: 80px;
   border-radius: 50%;
-  background: rgba(59, 130, 246, 0.15);
+  background: rgba(59, 130, 246, 0.1);
   animation: pulse 2s ease-out infinite;
 }
 
@@ -105,9 +105,9 @@ const handleClick = (prompt: string) => {
 .welcome h1 {
   font-size: 2.25rem;
   font-weight: 800;
-  color: white;
+  color: #1e293b;
   margin: 0 0 0.5rem 0;
-  background: linear-gradient(to right, #60a5fa, #34d399, #60a5fa);
+  background: linear-gradient(to right, #3b82f6, #059669, #3b82f6);
   background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
@@ -122,13 +122,13 @@ const handleClick = (prompt: string) => {
 
 .subtitle {
   font-size: 1.125rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(0, 0, 0, 0.55);
   margin: 0 0 0.75rem 0;
   font-weight: 500;
 }
 
 .description {
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.45);
   font-size: 0.875rem;
   margin: 0;
   max-width: 360px;
@@ -148,18 +148,18 @@ const handleClick = (prompt: string) => {
   align-items: center;
   gap: 0.875rem;
   padding: 1rem 1.25rem;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 1rem;
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .suggestion-card:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(59, 130, 246, 0.4);
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(59, 130, 246, 0.35);
   transform: translateY(-3px);
-  box-shadow: 0 20px 40px -15px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 20px 40px -15px rgba(59, 130, 246, 0.15);
 }
 
 .suggestion-card .icon {
@@ -168,7 +168,7 @@ const handleClick = (prompt: string) => {
 
 .suggestion-card .text {
   flex: 1;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(0, 0, 0, 0.8);
   font-size: 0.9375rem;
   font-weight: 500;
 }
@@ -176,7 +176,7 @@ const handleClick = (prompt: string) => {
 .suggestion-card .arrow {
   width: 1rem;
   height: 1rem;
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(0, 0, 0, 0.25);
   transition: all 0.2s;
 }
 

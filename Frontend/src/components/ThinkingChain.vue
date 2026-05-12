@@ -302,8 +302,8 @@ const groupedSteps = computed(() => {
 
 <style scoped>
 .thinking-chain {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-radius: 1rem;
   overflow: hidden;
 }
@@ -313,8 +313,8 @@ const groupedSteps = computed(() => {
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.25rem;
-  background: rgba(255, 255, 255, 0.03);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(0, 0, 0, 0.02);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .header-left {
@@ -330,7 +330,7 @@ const groupedSteps = computed(() => {
 .header-title {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(0, 0, 0, 0.8);
 }
 
 .header-right {
@@ -342,7 +342,7 @@ const groupedSteps = computed(() => {
 .progress-bar {
   width: 80px;
   height: 4px;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.08);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -356,7 +356,7 @@ const groupedSteps = computed(() => {
 
 .progress-text {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.5);
   font-family: monospace;
 }
 
@@ -387,7 +387,7 @@ const groupedSteps = computed(() => {
 .connector-line {
   width: 2px;
   flex: 1;
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(0, 0, 0, 0.08);
   margin-bottom: 4px;
 }
 
@@ -424,8 +424,8 @@ const groupedSteps = computed(() => {
 
 .step-content {
   flex: 1;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.05);
   border-radius: 0.75rem;
   padding: 0.875rem 1rem;
   cursor: pointer;
@@ -433,12 +433,12 @@ const groupedSteps = computed(() => {
 }
 
 .step-content:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 0, 0, 0.08);
 }
 
 .step-item.expanded .step-content {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .step-header {
@@ -460,7 +460,7 @@ const groupedSteps = computed(() => {
 
 .type-label {
   font-size: 0.6875rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.5);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -468,8 +468,8 @@ const groupedSteps = computed(() => {
 .agent-badge {
   font-size: 0.625rem;
   padding: 0.125rem 0.375rem;
-  background: rgba(59, 130, 246, 0.2);
-  color: #60a5fa;
+  background: rgba(59, 130, 246, 0.1);
+  color: #2563eb;
   border-radius: 9999px;
   margin-left: 0.25rem;
 }
@@ -482,38 +482,38 @@ const groupedSteps = computed(() => {
 .step-title {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(0, 0, 0, 0.85);
   margin-bottom: 0.375rem;
 }
 
 .step-preview {
   font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.55);
   line-height: 1.5;
 }
 
 .step-details {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .detail-content {
   font-size: 0.875rem;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgba(0, 0, 0, 0.75);
   line-height: 1.7;
   margin-bottom: 0.75rem;
 }
 
 .detail-extra {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.04);
   border-radius: 0.5rem;
   padding: 0.75rem;
 }
 
 .extra-label {
   font-size: 0.6875rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.45);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 0.375rem;
@@ -521,7 +521,7 @@ const groupedSteps = computed(() => {
 
 .extra-text {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(0, 0, 0, 0.65);
   line-height: 1.6;
   margin: 0;
   white-space: pre-wrap;
@@ -534,13 +534,13 @@ const groupedSteps = computed(() => {
   justify-content: center;
   margin-top: 0.5rem;
   padding-top: 0.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.04);
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
 }
 
 .arrow-icon {
   width: 1rem;
   height: 1rem;
-  color: rgba(255, 255, 255, 0.3);
+  color: rgba(0, 0, 0, 0.3);
   transition: transform 0.2s;
 }
 
@@ -602,7 +602,7 @@ const groupedSteps = computed(() => {
   align-items: center;
   gap: 0.25rem;
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.5);
+  color: rgba(0, 0, 0, 0.5);
 }
 
 .toggle-text {
@@ -621,12 +621,12 @@ const groupedSteps = computed(() => {
 
 .summary-label {
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.45);
 }
 
 .summary-value {
   font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(0, 0, 0, 0.7);
   font-family: monospace;
 }
 
@@ -674,7 +674,7 @@ const groupedSteps = computed(() => {
 .step-label {
   font-size: 0.75rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(0, 0, 0, 0.6);
 }
 
 .tool-step-content {
@@ -682,7 +682,7 @@ const groupedSteps = computed(() => {
 }
 
 .code-block {
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.05);
   border-radius: 0.5rem;
   overflow: hidden;
 }
@@ -692,14 +692,14 @@ const groupedSteps = computed(() => {
   align-items: center;
   justify-content: space-between;
   padding: 0.375rem 0.75rem;
-  background: rgba(255, 255, 255, 0.05);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  background: rgba(0, 0, 0, 0.03);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .code-lang {
   font-size: 0.625rem;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(0, 0, 0, 0.45);
   font-weight: 600;
   letter-spacing: 0.05em;
 }
@@ -707,7 +707,7 @@ const groupedSteps = computed(() => {
 .code-content {
   padding: 0.75rem;
   font-size: 0.75rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(0, 0, 0, 0.75);
   line-height: 1.6;
   margin: 0;
   white-space: pre-wrap;
