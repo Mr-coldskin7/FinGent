@@ -15,6 +15,12 @@ try:
 except ImportError:
     import tools
 
+try:
+    from Data.memory import get_memory_manager, MemoryManager
+except ImportError:
+    get_memory_manager = None
+    MemoryManager = None
+
 load_dotenv()
 qianwen_api_key = os.getenv("QIANWEN_API_KEY")
 datetime_format = "%Y-%m-%d"
@@ -98,17 +104,21 @@ class Agent:
         system_prompt: str,
         checkpointer=None,
         simulated_date: Optional[str] = None,
+        memory_manager=None,
+        user_id: Optional[str] = None,
     ):
         self.checkpointer = checkpointer
         self.thread_id = str(uuid.uuid4())
         self.model = model
         self.tools = tools
+        self.memory_manager = memory_manager
+        self.user_id = user_id or "anonymous"
 
         # 支持回测时的日期模拟（环境变量优先级最高，用于回测）
         effective_date = (
             os.getenv("FINGENT_SIMULATED_DATE") or simulated_date or current_date
         )
-        self.reminder = f"""### ⚠️ TODAY IS {effective_date} (YYYY-MM-DD). 
+        self.reminder = f"""### ⚠️ TODAY IS {effective_date} (YYYY-MM-DD).
 NEVER GUESS DATES. You are also a professional financial assistant."""
 
         self.agent = create_agent(
@@ -150,7 +160,59 @@ NEVER GUESS DATES. You are also a professional financial assistant."""
         """
         return f"请分析股票：{stock}\n\n用户问题：{user_input}"
 
-    def chat(self, user_input: str, thread_id: Optional[str] = None) -> AgentResponse:
+    def _inject_memory_sync(
+        self, user_input: str, stock: Optional[str] = None, user_id: Optional[str] = None
+    ) -> str:
+        """Synchronous memory injection (fallback when aiosqlite unavailable)."""
+        if not self.memory_manager or not stock:
+            return user_input
+        try:
+            uid = user_id or self.user_id or "anonymous"
+            agent_name = self.__class__.__name__
+            # sync fallback: use sync methods on MemoryManager
+            if hasattr(self.memory_manager, "build_memory_context"):
+                import asyncio
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    loop = None
+                if loop:
+                    # Cannot run async in running loop; skip injection
+                    return user_input
+                memory_ctx = asyncio.run(
+                    self.memory_manager.build_memory_context(uid, stock, agent_name)
+                )
+                if memory_ctx:
+                    return f"【相关记忆背景】\n{memory_ctx}\n\n---\n\n{user_input}"
+        except Exception:
+            pass
+        return user_input
+
+    async def _inject_memory_async(
+        self, user_input: str, stock: Optional[str] = None, user_id: Optional[str] = None
+    ) -> str:
+        """Asynchronous memory injection."""
+        if not self.memory_manager or not stock:
+            return user_input
+        try:
+            uid = user_id or self.user_id or "anonymous"
+            agent_name = self.__class__.__name__
+            memory_ctx = await self.memory_manager.build_memory_context(
+                uid, stock, agent_name
+            )
+            if memory_ctx:
+                return f"【相关记忆背景】\n{memory_ctx}\n\n---\n\n{user_input}"
+        except Exception as e:
+            print(f"⚠️ Memory injection failed: {e}")
+        return user_input
+
+    def chat(
+        self,
+        user_input: str,
+        thread_id: Optional[str] = None,
+        stock: Optional[str] = None,
+        user_id: Optional[str] = None,
+    ) -> AgentResponse:
         """
         Execute conversation, automatically continues based on history stored in checkpointer
         Returns standardized AgentResponse with complete Chain-of-Thought tracking
@@ -158,6 +220,8 @@ NEVER GUESS DATES. You are also a professional financial assistant."""
         Args:
             user_input: Input message from user
             thread_id: Optional thread ID to switch to before chatting
+            stock: Stock symbol for memory injection
+            user_id: User identifier for memory injection
 
         Returns:
             AgentResponse: Standardized response with CoT tracking
@@ -169,8 +233,11 @@ NEVER GUESS DATES. You are also a professional financial assistant."""
 
         config = self._get_config()
 
+        # Inject L3 memory if available (sync fallback)
+        enriched_input = self._inject_memory_sync(user_input, stock, user_id)
+
         # Pass only new message, LangGraph automatically loads history from checkpointer
-        new_message = HumanMessage(content=user_input)
+        new_message = HumanMessage(content=enriched_input)
 
         # 重试机制：最多3次，带指数退避延迟
         max_retries = 3
@@ -193,7 +260,11 @@ NEVER GUESS DATES. You are also a professional financial assistant."""
                     raise
 
     async def achat(
-        self, user_input: str, thread_id: Optional[str] = None
+        self,
+        user_input: str,
+        thread_id: Optional[str] = None,
+        stock: Optional[str] = None,
+        user_id: Optional[str] = None,
     ) -> AgentResponse:
         """
         Execute conversation, automatically continues based on history stored in checkpointerasynchronously
@@ -202,6 +273,8 @@ NEVER GUESS DATES. You are also a professional financial assistant."""
         Args:
             user_input: Input message from user
             thread_id: Optional thread ID to switch to before chatting
+            stock: Stock symbol for memory injection
+            user_id: User identifier for memory injection
 
         Returns:
             AgentResponse: Standardized response with CoT tracking
@@ -211,8 +284,11 @@ NEVER GUESS DATES. You are also a professional financial assistant."""
 
         config = self._get_config()
 
+        # Inject L3 memory if available
+        enriched_input = await self._inject_memory_async(user_input, stock, user_id)
+
         # Pass only new message, LangGraph automatically loads history from checkpointer
-        new_message = HumanMessage(content=user_input)
+        new_message = HumanMessage(content=enriched_input)
 
         # 重试机制：最多3次，带指数退避延迟
         max_retries = 3

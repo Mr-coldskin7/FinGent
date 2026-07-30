@@ -102,7 +102,15 @@ class TECHNICAL_NERD(base.Agent):
     def format_prompt(self, stock: str, user_input: str) -> str:
         return f"请分析股票 {stock} 的技术面情况。用户原始问题：{user_input}"
 
-    def __init__(self, model, tools=None, checkpointer=None, simulated_date=None):
+    def __init__(
+        self,
+        model,
+        tools=None,
+        checkpointer=None,
+        simulated_date=None,
+        memory_manager=None,
+        user_id=None,
+    ):
 
         system_prompt = f"""
         # SYSTEM PROMPT: TECHNICAL_NERD
@@ -192,7 +200,13 @@ class TECHNICAL_NERD(base.Agent):
 
         """
         super().__init__(
-            model, tools or [], system_prompt, checkpointer, simulated_date
+            model,
+            tools or [],
+            system_prompt,
+            checkpointer,
+            simulated_date,
+            memory_manager=memory_manager,
+            user_id=user_id,
         )
 
 
@@ -206,7 +220,15 @@ class Morefit(base.Agent):
             f"3. 使用工具获取数据后，输出纯JSON格式分析结果"
         )
 
-    def __init__(self, model, tools=None, checkpointer=None, simulated_date=None):
+    def __init__(
+        self,
+        model,
+        tools=None,
+        checkpointer=None,
+        simulated_date=None,
+        memory_manager=None,
+        user_id=None,
+    ):
 
         system_prompt = f"""
             # SYSTEM PROMPT: Morefit
@@ -304,7 +326,13 @@ class Morefit(base.Agent):
         **DO NOT** write analysis outside the JSON. All text goes in "reason".
         """
         super().__init__(
-            model, tools or [], system_prompt, checkpointer, simulated_date
+            model,
+            tools or [],
+            system_prompt,
+            checkpointer,
+            simulated_date,
+            memory_manager=memory_manager,
+            user_id=user_id,
         )
 
 
@@ -325,7 +353,15 @@ class RiskManager(base.Agent):
     - 高波动 ≠ 高收益，高波动 = 高不确定性 = 小仓位。
     """
 
-    def __init__(self, model, tools=None, checkpointer=None, simulated_date=None):
+    def __init__(
+        self,
+        model,
+        tools=None,
+        checkpointer=None,
+        simulated_date=None,
+        memory_manager=None,
+        user_id=None,
+    ):
         system_prompt = f"""
         # SYSTEM PROMPT: RiskManager
         
@@ -417,7 +453,13 @@ class RiskManager(base.Agent):
         **Mantra**: Size your positions for the worst case, not the best case.
         """
         super().__init__(
-            model, tools or [], system_prompt, checkpointer, simulated_date
+            model,
+            tools or [],
+            system_prompt,
+            checkpointer,
+            simulated_date,
+            memory_manager=memory_manager,
+            user_id=user_id,
         )
 
 
@@ -438,9 +480,16 @@ class SentimentAnalyzer(base.Agent):
     - 极端情绪（过度乐观/悲观）是反向交易的信号。
     """
 
-    def __init__(self, model, tools=None, checkpointer=None, simulated_date=None):
+    def __init__(
+        self,
+        model,
+        tools=None,
+        checkpointer=None,
+        simulated_date=None,
+        memory_manager=None,
+        user_id=None,
+    ):
         system_prompt = f"""
-        # SYSTEM PROMPT: SentimentAnalyzer
         
         You are a sentiment analyst who reads the market's mood through news, social media, and headlines.
         You believe that "the market is a voting machine in the short run" and your job is to count the votes.
@@ -523,5 +572,6 @@ class SentimentAnalyzer(base.Agent):
         **Mantra**: Read the crowd, but trade against it at extremes.
         """
         super().__init__(
-            model, tools or [], system_prompt, checkpointer, simulated_date
+            model, tools or [], system_prompt, checkpointer, simulated_date,
+            memory_manager=memory_manager,
         )

@@ -64,6 +64,9 @@ async def get_stock_price(
     返回包含日期、开盘、最高、最低、收盘、成交量的JSON数据
     """
     try:
+        # 添加延迟以避免并发请求超过 API 限制
+        await asyncio.sleep(2)
+
         # 只请求必要区间的数据，避免一次性拉取过多历史数据
         end_date = (
             datetime.strptime(as_of_date, "%Y-%m-%d").date()

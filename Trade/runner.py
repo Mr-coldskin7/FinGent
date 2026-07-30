@@ -29,7 +29,8 @@ def _require_backtrader() -> None:
 
 
 async def load_price_dataframe(
-    symbol: str, start: Optional[str] = None, end: Optional[str] = None
+    symbol: str, start: Optional[str] = None, end: Optional[str] = None,
+    resample_freq: str = "daily",
 ) -> pd.DataFrame:
     """加载价格数据，支持指定日期范围（异步）。
 
@@ -47,7 +48,8 @@ async def load_price_dataframe(
     # 根据市场类型调用对应的底层 API，传入日期范围
     if market == "US":
         raw = await us_stock.get_historical_stock_price_by_symbol(
-            symbol=normalized_symbol, startDate=start, endDate=end
+            symbol=normalized_symbol, startDate=start, endDate=end,
+            resampleFreq=resample_freq,
         )
         price_data = adapt_us_prices(raw, normalized_symbol)
     elif market == "CN":
@@ -421,7 +423,8 @@ async def run_backtest_from_symbol(
     symbol: str = "AAPL",
     start: Optional[str] = None,
     end: Optional[str] = None,
+    resample_freq: str = "daily",
     **kwargs,
 ) -> Dict[str, Any]:
-    data = await load_price_dataframe(symbol=symbol, start=start, end=end)
+    data = await load_price_dataframe(symbol=symbol, start=start, end=end, resample_freq=resample_freq)
     return run_backtest(fin_graph=fin_graph, data=data, symbol=symbol, **kwargs)

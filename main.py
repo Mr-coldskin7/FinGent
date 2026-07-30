@@ -10,6 +10,7 @@ FinGent - AI股票分析助手
 
 import os
 import sys
+import asyncio
 import argparse
 from datetime import datetime
 from dotenv import load_dotenv
@@ -17,8 +18,12 @@ from dotenv import load_dotenv
 # 加载环境变量
 load_dotenv()
 
+# 统一配置
+from config import get_settings
+settings = get_settings()
+
 # 导入LLM模块
-from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
+from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 from langchain_openai import ChatOpenAI
 
 # 导入FinGent组件
@@ -33,20 +38,32 @@ from LLM.unified_stock_tools import (
     get_stock_financial_report_links,
     get_stock_financial_statements,
 )
+from Data.memory import get_memory_manager
+import atexit
+
+# Redis checkpointer 上下文（全局，供清理使用）
+_redis_ctx = None
+
+
+@atexit.register
+def cleanup():
+    """程序退出时清理 Redis 连接"""
+    if _redis_ctx is not None:
+        try:
+            asyncio.run(_redis_ctx.__aexit__(None, None, None))
+        except Exception:
+            pass
 
 
 def get_model(temperature: float = 0.5):
     """获取配置的LLM模型"""
-    api_key = os.getenv("QIANWEN_API_KEY")
-    if not api_key:
+    if not settings.qianwen_api_key:
         raise ValueError("请设置 QIANWEN_API_KEY 环境变量")
 
     return ChatOpenAI(
-        api_key=api_key,
-        base_url=os.getenv(
-            "MODEL_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        ),
-        model="qwen-max",
+        api_key=settings.qianwen_api_key,
+        base_url=settings.model_base_url,
+        model=settings.model_name,
         temperature=temperature,
     )
 
@@ -61,35 +78,35 @@ def create_fin_graph(temperature: float = 0.5):
     Returns:
         FinGraph: 配置好的图实例
     """
-    # 初始化组件
-    _mysql_saver_ctx = PyMySQLSaver.from_conn_string(
-        os.getenv("MYSQL_URL", "mysql+pymysql://root:password@localhost:3306/fingent")
-    )
-    _mysql_saver = _mysql_saver_ctx.__enter__()
-    _mysql_saver.setup()
-    checkpointer = _mysql_saver
+    # 初始化组件 - 使用 Redis 作为 checkpointer
+    global _redis_ctx
+    _redis_ctx = AsyncRedisSaver.from_conn_string(settings.redis_url)
+    checkpointer = asyncio.run(_redis_ctx.__aenter__())
     model = get_model(temperature=temperature)
+    memory_manager = get_memory_manager()
 
     preprocessor = Preprocessor(model, checkpointer)
     router = Router()
 
-    # 创建Agent实例 - 使用统一股票工具
+    # 创建Agent实例 - 使用统一股票工具，注入 L3 记忆管理器
     tech_agent = TECHNICAL_NERD(
         model=model,
-        tools=[get_stock_price, get_stock_basic_info],  # 获取历史价格  # 获取基础信息
+        tools=[get_stock_price, get_stock_basic_info],
         checkpointer=checkpointer,
+        memory_manager=memory_manager,
     )
 
     morefit_agent = Morefit(
         model=model,
         tools=[
-            get_stock_company_info,  # 公司详情
-            get_stock_financial_report_links,  # 财报报告链接（SEC/交易所）
-            get_stock_financial_statements,  # 财务报表数据（三张表数据）
-            get_stock_price,  # 价格数据
-            get_stock_basic_info,  # 基础信息
+            get_stock_company_info,
+            get_stock_financial_report_links,
+            get_stock_financial_statements,
+            get_stock_price,
+            get_stock_basic_info,
         ],
         checkpointer=checkpointer,
+        memory_manager=memory_manager,
     )
 
     # 构建图
@@ -98,6 +115,7 @@ def create_fin_graph(temperature: float = 0.5):
         router=router,
         agent={"TECHNICAL_NERD": tech_agent, "Morefit": morefit_agent},
         checkpointer=checkpointer,
+        memory_manager=memory_manager,
     )
 
     return fin_graph
@@ -342,8 +360,6 @@ async def main_async():
 
 def main():
     """同步入口，运行异步主函数"""
-    import asyncio
-
     asyncio.run(main_async())
 
 

@@ -4,7 +4,7 @@ import type { BacktestRequest, BacktestResult, DailyUpdate } from '../types/back
 import { DEFAULT_BACKTEST_CONFIG } from '../types/backtest';
 import BacktestCandleChart from './BacktestCandleChart.vue';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 const loading = ref(false);
 const streaming = ref(false);
@@ -18,6 +18,7 @@ const result = ref<BacktestResult | null>(null);
 const dailyUpdates = ref<DailyUpdate[]>([]);
 const error = ref<string>('');
 const tradeSignals = ref<any[]>([]);
+const sessionId = ref<string | null>(null);  // 回测会话 ID，用于并发隔离和取消
 
 // 图表数据 - 从回测实时数据构建
 const chartData = ref<any>(null);
@@ -172,12 +173,18 @@ const runStreamingBacktest = async (retryCount = 0) => {
   let currentEvent: { event?: string; data?: string } = {};
   
   try {
+    // 生成或复用 session_id
+    if (!sessionId.value) {
+      sessionId.value = `bt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    }
+
     const response = await fetch(`${API_BASE}/api/v1/backtest-stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...config,
         end: config.end || undefined,
+        session_id: sessionId.value,
       }),
       signal: streamAbortController.signal,
     });
@@ -322,6 +329,7 @@ const cancelBacktest = async () => {
     const res = await fetch(`${API_BASE}/api/v1/backtest-cancel`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ session_id: sessionId.value }),
     });
     const data = await res.json();
     console.log('[Backtest] 取消请求响应:', data);
@@ -511,14 +519,24 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
           
           <div class="form-group">
             <label>结束日期 (可选)</label>
-            <input 
-              v-model="config.end" 
-              type="date" 
+            <input
+              v-model="config.end"
+              type="date"
               class="form-input"
               placeholder="留空为至今"
             />
           </div>
-          
+
+          <div class="form-group">
+            <label>数据频率</label>
+            <select v-model="config.interval" class="form-input">
+              <option value="daily">日线 (Daily)</option>
+              <option value="weekly">周线 (Weekly)</option>
+              <option value="monthly">月线 (Monthly)</option>
+              <option value="annually">年线 (Annually)</option>
+            </select>
+          </div>
+
           <div class="form-group">
             <label>手续费率 ({{ (config.commission * 100).toFixed(2) }}%)</label>
             <input 

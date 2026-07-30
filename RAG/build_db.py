@@ -42,7 +42,7 @@ def build_vector_db():
     client = chromadb.PersistentClient(path=DB_PATH)
     try:
         client.delete_collection("finance_rag")
-    except:
+    except Exception:
         pass
     collection = client.create_collection(
         name="finance_rag", metadata={"hnsw:space": "cosine"}
@@ -61,7 +61,7 @@ def build_vector_db():
             embeddings=chunk_embeddings.tolist(),
             documents=chunk_docs,
             metadatas=chunk_metadatas,
-            ids=id,
+            ids=ids[i : i + chunk_size],
         )
 
         del chunk_embeddings

@@ -1,12 +1,12 @@
 <script setup lang="ts">
 defineProps<{
-  currentView: 'chat' | 'backtest' | 'market';
+  currentView: 'chat' | 'backtest' | 'market' | 'settings';
 }>();
 
 const emit = defineEmits<{
   'new-chat': [];
   'quick-input': [text: string];
-  'switch-view': [view: 'chat' | 'backtest' | 'market'];
+  'switch-view': [view: 'chat' | 'backtest' | 'market' | 'settings'];
 }>();
 
 const quickActions = [
@@ -75,6 +75,16 @@ const navItems = [
       </div>
     </div>
     
+    <!-- 设置按钮 -->
+    <button
+      class="settings-btn"
+      :class="{ active: currentView === 'settings' }"
+      @click="emit('switch-view', 'settings')"
+    >
+      <span class="settings-icon">⚙️</span>
+      <span class="settings-text">模型设置</span>
+    </button>
+
     <div class="footer">
       <div class="footer-icon">⚡</div>
       <div class="footer-text">
@@ -255,6 +265,37 @@ const navItems = [
 
 .action-text {
   font-weight: 500;
+}
+
+.settings-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: transparent;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 0.625rem;
+  color: rgba(0, 0, 0, 0.55);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin-bottom: 0.75rem;
+}
+
+.settings-btn:hover {
+  background: rgba(0, 0, 0, 0.04);
+  color: #1e293b;
+}
+
+.settings-btn.active {
+  background: rgba(139, 92, 246, 0.08);
+  border-color: rgba(139, 92, 246, 0.3);
+  color: #7c3aed;
+}
+
+.settings-icon {
+  font-size: 1.125rem;
 }
 
 .footer {

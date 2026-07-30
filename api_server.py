@@ -9,13 +9,19 @@ from sse_starlette.sse import EventSourceResponse
 import asyncio
 from typing import Optional
 import queue
+from queue import Queue as _Queue
 import pandas as pd
+from dataclasses import dataclass, field
 
 load_dotenv()
 from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 
+# ========== 统一配置 ==========
+from config import get_settings, get_model_config, update_model_config, reset_model_config, ModelConfig, MODEL_PRESETS
+
+settings = get_settings()
+
 # ========== 初始化 Graph ==========
-from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
 from langchain_openai import ChatOpenAI
 from LLM.preprocess import Preprocessor
 from LLM.router import Router
@@ -24,56 +30,71 @@ from LLM.graph import FinGraph
 from LLM.unified_stock_tools import *
 from LLM.risk_tools import RISK_TOOLS
 from LLM.sentiment_tools import SENTIMENT_TOOLS
+from Data.memory import get_memory_manager
 
-# MySQL 持久化 - 使用上下文管理器
-redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-_redis_ctx = AsyncRedisSaver.from_conn_string(redis_url)
+# Redis 持久化 - 使用上下文管理器
+_redis_ctx = AsyncRedisSaver.from_conn_string(settings.redis_url)
 checkpointer = asyncio.run(_redis_ctx.__aenter__())
 
+# L3 长期记忆管理器
+memory_manager = get_memory_manager()
 
-model = ChatOpenAI(
-    api_key=os.getenv("QIANWEN_API_KEY"),
-    base_url=os.getenv(
-        "MODEL_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    ),
-    model="qwen-max",
-    temperature=0.5,
-)
 
-fin_graph = FinGraph(
-    preprocessor=Preprocessor(model, checkpointer),
-    router=Router(),
-    agent={
-        "TECHNICAL_NERD": TECHNICAL_NERD(
-            model,
-            [
-                get_stock_price,
-                get_stock_basic_info,
-                search_financial_knowledge,
-                get_financial_indicator_explanation,
-                bocha_search,
-            ],
-            checkpointer,
-        ),
-        "Morefit": Morefit(
-            model,
-            [
-                get_stock_company_info,
-                get_stock_financial_report_links,
-                get_stock_financial_statements,
-                get_stock_price,
-                get_stock_basic_info,
-                search_financial_knowledge,
-                get_financial_indicator_explanation,
-                bocha_search,
-            ],
-            checkpointer,
-        ),
-        "RiskManager": RiskManager(model, RISK_TOOLS, checkpointer),
-        "SentimentAnalyzer": SentimentAnalyzer(model, SENTIMENT_TOOLS, checkpointer),
-    },
-    checkpointer=checkpointer,
-)
+def build_fin_graph(model_config: ModelConfig) -> FinGraph:
+    """工厂函数：根据模型配置创建 FinGraph 实例"""
+    llm = ChatOpenAI(
+        api_key=model_config.api_key,
+        base_url=model_config.base_url,
+        model=model_config.model_name,
+        temperature=model_config.temperature,
+    )
+    return FinGraph(
+        preprocessor=Preprocessor(llm, checkpointer),
+        router=Router(),
+        agent={
+            "TECHNICAL_NERD": TECHNICAL_NERD(
+                llm,
+                [
+                    get_stock_price,
+                    get_stock_basic_info,
+                    search_financial_knowledge,
+                    get_financial_indicator_explanation,
+                    bocha_search,
+                ],
+                checkpointer,
+                memory_manager=memory_manager,
+            ),
+            "Morefit": Morefit(
+                llm,
+                [
+                    get_stock_company_info,
+                    get_stock_financial_report_links,
+                    get_stock_financial_statements,
+                    get_stock_price,
+                    get_stock_basic_info,
+                    search_financial_knowledge,
+                    get_financial_indicator_explanation,
+                    bocha_search,
+                ],
+                checkpointer,
+                memory_manager=memory_manager,
+            ),
+            "RiskManager": RiskManager(
+                llm, RISK_TOOLS, checkpointer, memory_manager=memory_manager
+            ),
+            "SentimentAnalyzer": SentimentAnalyzer(
+                llm, SENTIMENT_TOOLS, checkpointer, memory_manager=memory_manager
+            ),
+        },
+        checkpointer=checkpointer,
+        memory_manager=memory_manager,
+    )
+
+
+# 全局 FinGraph 实例 + 并发锁
+fin_graph = build_fin_graph(get_model_config())
+_graph_lock = asyncio.Lock()
+
 
 # 注册关闭钩子（程序退出时清理）
 import atexit
@@ -90,13 +111,96 @@ def cleanup():
 # ========== API ==========
 app = FastAPI()
 app.add_middleware(
-    CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"]
+    CORSMiddleware,
+    allow_origins=settings.cors_origins_list,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
 class ChatRequest(BaseModel):
     user_input: str
     thread_id: Optional[str] = None
+    user_id: Optional[str] = "anonymous"
+
+
+class FeedbackRequest(BaseModel):
+    session_id: str
+    stock_symbol: str
+    agent_name: Optional[str] = None  # 如果针对特定 agent，否则影响全局
+    feedback: str  # agree | disagree | correction
+    rule_text: Optional[str] = None  # 用户纠正内容，correction 时必填
+    user_id: Optional[str] = "anonymous"
+
+
+class ReviewRequest(BaseModel):
+    session_id: Optional[str] = None
+    stock_symbol: Optional[str] = None
+    user_id: Optional[str] = "anonymous"
+
+
+@app.post("/api/v1/feedback")
+async def feedback(req: FeedbackRequest):
+    """
+    用户反馈接口 — Self-Improve 被动触发入口
+    - agree: 提升对应 agent 权重
+    - disagree/correction: 降低权重，并记录 user_rules
+    """
+    try:
+        mm = memory_manager
+        # 1. 更新 analysis_history 中的 feedback（找最近一条匹配记录）
+        # 2. 更新 agent_stats 权重
+        feedback_lower = req.feedback.lower()
+        if req.session_id and req.stock_symbol:
+            await mm.record_feedback(req.session_id, req.stock_symbol, feedback_lower)
+
+        if feedback_lower == "agree":
+            if req.agent_name:
+                new_weight = await mm.adjust_weight(
+                    req.agent_name, 0.05, req.user_id
+                )
+                await mm.record_agent_outcome(req.agent_name, "agree", user_id=req.user_id)
+                return {
+                    "success": True,
+                    "action": "weight_increased",
+                    "agent": req.agent_name,
+                    "new_weight": new_weight,
+                }
+            return {"success": True, "message": "全局同意已记录（未指定 Agent）"}
+
+        elif feedback_lower in ("disagree", "correction"):
+            if req.agent_name:
+                new_weight = await mm.adjust_weight(
+                    req.agent_name, -0.10, req.user_id
+                )
+                await mm.record_agent_outcome(
+                    req.agent_name, feedback_lower, user_id=req.user_id
+                )
+            if req.rule_text:
+                rule = await mm.add_or_update_rule(
+                    rule_text=req.rule_text,
+                    agent_name=req.agent_name or "ALL",
+                    user_id=req.user_id,
+                    source="explicit_feedback",
+                )
+                return {
+                    "success": True,
+                    "action": "rule_recorded",
+                    "agent": req.agent_name,
+                    "new_weight": new_weight if req.agent_name else None,
+                    "rule_id": rule.id,
+                    "trigger_count": rule.trigger_count,
+                }
+            return {
+                "success": True,
+                "action": "weight_decreased",
+                "agent": req.agent_name,
+                "new_weight": new_weight if req.agent_name else None,
+            }
+        else:
+            return {"success": False, "error": f"未知反馈类型: {req.feedback}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
 @app.post("/api/v1/chat")
@@ -106,7 +210,9 @@ async def chat(req: ChatRequest):
         req.thread_id or f"chat_{datetime.now():%Y%m%d_%H%M%S}_{uuid.uuid4().hex[:6]}"
     )
 
-    result = await fin_graph.run(req.user_input, thread_id)
+    async with _graph_lock:
+        current_graph = fin_graph
+    result = await current_graph.run(req.user_input, thread_id, user_id=req.user_id)
 
     print(f"\n{'='*60}")
     print(f"DEBUG: Graph result keys: {list(result.keys())}")
@@ -133,6 +239,8 @@ async def chat(req: ChatRequest):
         response["final_decision"] = result["final_decision"]
     if result.get("detailed_analysis"):
         response["detailed_analysis"] = result["detailed_analysis"]
+    if result.get("user_id"):
+        response["user_id"] = result["user_id"]
 
     return response
 
@@ -162,6 +270,117 @@ US_HOT_STOCKS = [
 ]
 
 
+# ========== 模型管理 API ==========
+
+
+class ModelConfigRequest(BaseModel):
+    api_key: Optional[str] = None
+    base_url: Optional[str] = None
+    model_name: Optional[str] = None
+    temperature: Optional[float] = None
+    preset: Optional[str] = None  # 预设提供商名称
+
+
+class ModelTestRequest(BaseModel):
+    api_key: str
+    base_url: str
+    model_name: str
+
+
+@app.get("/api/v1/model/config")
+async def get_model_config_api():
+    """获取当前模型配置（api_key 脱敏）"""
+    config = get_model_config()
+    return {
+        "success": True,
+        "config": config.to_dict(mask_key=True),
+        "presets": MODEL_PRESETS,
+    }
+
+
+@app.put("/api/v1/model/config")
+async def update_model_config_api(req: ModelConfigRequest):
+    """更新模型配置并重建 FinGraph"""
+    global fin_graph
+
+    current = get_model_config()
+
+    # 应用预设
+    if req.preset and req.preset in MODEL_PRESETS:
+        preset = MODEL_PRESETS[req.preset]
+        new_config = ModelConfig(
+            api_key=req.api_key or current.api_key,
+            base_url=preset["base_url"],
+            model_name=preset["model_name"],
+            temperature=req.temperature if req.temperature is not None else current.temperature,
+        )
+    else:
+        new_config = ModelConfig(
+            api_key=req.api_key if req.api_key is not None else current.api_key,
+            base_url=req.base_url if req.base_url is not None else current.base_url,
+            model_name=req.model_name if req.model_name is not None else current.model_name,
+            temperature=req.temperature if req.temperature is not None else current.temperature,
+        )
+
+    # 验证：api_key 不能为空
+    if not new_config.api_key:
+        return {"success": False, "error": "API Key 不能为空"}
+
+    # 重建 FinGraph
+    try:
+        async with _graph_lock:
+            fin_graph = build_fin_graph(new_config)
+        update_model_config(new_config)
+        return {
+            "success": True,
+            "message": "模型配置已更新",
+            "config": new_config.to_dict(mask_key=True),
+        }
+    except Exception as e:
+        return {"success": False, "error": f"重建模型失败: {str(e)}"}
+
+
+@app.post("/api/v1/model/test")
+async def test_model_connection(req: ModelTestRequest):
+    """测试模型连接（发送一个简单请求验证 api_key + base_url）"""
+    try:
+        test_llm = ChatOpenAI(
+            api_key=req.api_key,
+            base_url=req.base_url,
+            model=req.model_name,
+            temperature=0.1,
+        )
+        # 发一个最简单的请求测试连通性
+        from langchain_core.messages import HumanMessage
+
+        response = await test_llm.ainvoke([HumanMessage(content="Hi")])
+        return {
+            "success": True,
+            "message": "连接成功",
+            "model_response_preview": response.content[:100],
+        }
+    except Exception as e:
+        return {"success": False, "error": f"连接失败: {str(e)}"}
+
+
+@app.post("/api/v1/model/reset")
+async def reset_model_config_api():
+    """重置为 .env 默认配置"""
+    global fin_graph
+
+    try:
+        default_config = reset_model_config()
+        async with _graph_lock:
+            fin_graph = build_fin_graph(default_config)
+        return {
+            "success": True,
+            "message": "已恢复默认配置",
+            "config": default_config.to_dict(mask_key=True),
+        }
+    except Exception as e:
+        return {"success": False, "error": f"重置失败: {str(e)}"}
+
+
 @app.get("/api/v1/market")
 async def get_market(market: str = "zh", limit: int = 50):
     """
@@ -175,6 +394,60 @@ async def get_market(market: str = "zh", limit: int = 50):
         return await _get_us_market()
     else:
         return {"success": False, "error": "不支持的市场类型，请使用 zh 或 us"}
+
+
+@app.post("/api/v1/review")
+async def review(req: ReviewRequest):
+    if not req.session_id and not req.stock_symbol:
+        return {"success": False, "error": "需要 session_id 或 stock_symbol 来进行复盘。"}
+
+    latest_record = None
+    if req.session_id:
+        latest_record = await memory_manager.get_analysis_record(
+            req.session_id, req.stock_symbol
+        )
+    if not latest_record and req.stock_symbol:
+        recent = await memory_manager.get_recent_analyses(
+            req.user_id, req.stock_symbol, limit=1
+        )
+        latest_record = recent[0] if recent else None
+
+    if not latest_record:
+        return {"success": False, "error": "未找到对应的分析记录。"}
+
+    history = await memory_manager.get_recent_analyses(
+        req.user_id, latest_record.stock_symbol, limit=5
+    )
+    agent_weights = await memory_manager.get_agent_weights(
+        user_id=req.user_id, agent_names=list(latest_record.agent_votes.keys())
+    )
+    inconsistency = await memory_manager.find_inconsistencies(
+        user_id=req.user_id,
+        stock_symbol=latest_record.stock_symbol,
+        current_decision=latest_record.final_decision,
+    )
+
+    return {
+        "success": True,
+        "review": {
+            "stock_symbol": latest_record.stock_symbol,
+            "current_decision": latest_record.final_decision,
+            "reasoning_summary": latest_record.reasoning_summary,
+            "user_feedback": latest_record.user_feedback,
+            "agent_votes": latest_record.agent_votes,
+            "agent_weights": agent_weights,
+            "recent_history": [
+                {
+                    "created_at": r.created_at,
+                    "final_decision": r.final_decision,
+                    "user_feedback": r.user_feedback,
+                    "query": r.query,
+                }
+                for r in history
+            ],
+            "inconsistency_warning": inconsistency,
+        },
+    }
 
 
 async def _get_zh_market(limit: int):
@@ -247,7 +520,7 @@ async def _get_us_market():
         import httpx
         from datetime import datetime, timedelta
 
-        token = os.getenv("TIINGO_API_KEY")
+        token = settings.tiingo_api_key
         if not token:
             return {"success": False, "error": "TIINGO_API_KEY 未配置"}
 
@@ -312,6 +585,46 @@ class BacktestRequest(BaseModel):
     quiet: bool = False
     temperature: float = 0.0
     audit_path: str = "Trade/backtest_audit.jsonl"
+    session_id: Optional[str] = None  # 回测会话 ID，用于并发隔离
+    interval: str = "daily"  # 数据频率：daily / weekly / monthly / annually
+
+
+@dataclass
+class BacktestSession:
+    """单个回测会话的状态容器，支持多用户并发回测"""
+
+    session_id: str
+    data_queue: _Queue = field(default_factory=lambda: _Queue(maxsize=1000))
+    cancelled: bool = False
+    done: bool = False
+    error: Optional[str] = None
+
+
+# 回测会话管理：按 session_id 隔离
+backtest_sessions: dict[str, BacktestSession] = {}
+
+
+def get_or_create_session(session_id: Optional[str] = None) -> tuple[str, BacktestSession]:
+    """获取或创建回测会话，限制并发数"""
+    if session_id and session_id in backtest_sessions:
+        existing = backtest_sessions[session_id]
+        if existing.done:
+            del backtest_sessions[session_id]
+        else:
+            return session_id, existing
+
+    # 限制并发回测数
+    active_count = sum(1 for s in backtest_sessions.values() if not s.done)
+    if active_count >= settings.backtest_max_concurrent:
+        # 清理已完成的会话
+        done_keys = [k for k, v in backtest_sessions.items() if v.done]
+        for k in done_keys:
+            del backtest_sessions[k]
+
+    sid = session_id or f"bt_{uuid.uuid4().hex[:8]}"
+    session = BacktestSession(session_id=sid)
+    backtest_sessions[sid] = session
+    return sid, session
 
 
 @app.post("/api/v1/backtest")
@@ -323,16 +636,14 @@ async def backtest(req: BacktestRequest):
 
         os.environ["FINGENT_BACKTEST_STRICT"] = "1"
 
+        mc = get_model_config()
         temp_model = ChatOpenAI(
-            api_key=os.getenv("QIANWEN_API_KEY"),
-            base_url=os.getenv(
-                "MODEL_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
-            ),
-            model="qwen-max",
+            api_key=mc.api_key,
+            base_url=mc.base_url,
+            model=mc.model_name,
             temperature=req.temperature,
         )
-        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-        _redis_ctx = AsyncRedisSaver.from_conn_string(redis_url)
+        _redis_ctx = AsyncRedisSaver.from_conn_string(settings.redis_url)
         temp_checkpointer = await _redis_ctx.__aenter__()
 
         temp_graph = FinGraph(
@@ -365,6 +676,7 @@ async def backtest(req: BacktestRequest):
                 symbol=req.symbol,
                 start=req.start,
                 end=req.end,
+                resample_freq=req.interval,
                 initial_cash=req.initial_cash,
                 commission=req.commission,
                 slippage_perc=req.slippage,
@@ -384,28 +696,6 @@ async def backtest(req: BacktestRequest):
         }
     except Exception as e:
         return {"success": False, "error": str(e)}
-
-
-# 全局变量用于流式回测
-backtest_queue = None
-backtest_done = False
-backtest_error = None
-backtest_cancelled = False  # 取消标志
-
-
-def reset_backtest_state():
-    """重置回测状态"""
-    global backtest_queue, backtest_done, backtest_error, backtest_cancelled
-    backtest_queue = None
-    backtest_done = False
-    backtest_error = None
-    backtest_cancelled = False
-
-
-def is_backtest_cancelled():
-    """检查回测是否被取消"""
-    global backtest_cancelled
-    return backtest_cancelled
 
 
 def create_strategy_with_callback(
@@ -442,7 +732,7 @@ def create_strategy_with_callback(
 
 @app.post("/api/v1/backtest-stream")
 async def backtest_stream(req: BacktestRequest):
-    """流式回测API - 逐日返回结果
+    """流式回测API - 逐日返回结果（支持并发，按 session_id 隔离）
 
     SSE 事件格式:
     - event: start - 回测开始
@@ -457,12 +747,9 @@ async def backtest_stream(req: BacktestRequest):
     from Trade.runner import GraphSignalStrategy, load_price_dataframe
     import backtrader as bt
 
-    # 重置取消状态
-    reset_backtest_state()
+    # 创建或获取回测会话（并发隔离）
+    sid, session = get_or_create_session(req.session_id)
 
-    # 创建队列用于线程间通信
-    global backtest_queue
-    backtest_queue = queue.Queue(maxsize=1000)
     result_holder = {
         "strategy": None,
         "start_value": 0,
@@ -474,33 +761,28 @@ async def backtest_stream(req: BacktestRequest):
 
     def run_backtest():
         """在后台线程中运行回测"""
-        global backtest_cancelled, backtest_done, backtest_error
         try:
             os.environ["FINGENT_BACKTEST_STRICT"] = "1"
 
-            print(f"[StreamBacktest] 加载 {req.symbol} 数据...")
+            print(f"[StreamBacktest:{sid}] 加载 {req.symbol} 数据...")
             data = asyncio.run(
-                load_price_dataframe(symbol=req.symbol, start=req.start, end=req.end)
+                load_price_dataframe(symbol=req.symbol, start=req.start, end=req.end, resample_freq=req.interval)
             )
-            print(f"[StreamBacktest] 加载完成: {len(data)} 条")
+            print(f"[StreamBacktest:{sid}] 加载完成: {len(data)} 条")
 
-            # 检查是否已取消
-            if backtest_cancelled:
-                print(f"[StreamBacktest] 回测在启动前被取消")
-                backtest_done = True
+            if session.cancelled:
+                print(f"[StreamBacktest:{sid}] 回测在启动前被取消")
+                session.done = True
                 return
 
+            mc = get_model_config()
             temp_model = ChatOpenAI(
-                api_key=os.getenv("QIANWEN_API_KEY"),
-                base_url=os.getenv(
-                    "MODEL_BASE_URL",
-                    "https://dashscope.aliyuncs.com/compatible-mode/v1",
-                ),
-                model="qwen-max",
+                api_key=mc.api_key,
+                base_url=mc.base_url,
+                model=mc.model_name,
                 temperature=req.temperature,
             )
-            redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-            _redis_ctx = AsyncRedisSaver.from_conn_string(redis_url)
+            _redis_ctx = AsyncRedisSaver.from_conn_string(settings.redis_url)
             temp_checkpointer = asyncio.run(_redis_ctx.__aenter__())
 
             temp_graph = FinGraph(
@@ -541,11 +823,10 @@ async def backtest_stream(req: BacktestRequest):
             cerebro.addanalyzer(bt.analyzers.SharpeRatio, _name="sharpe")
             cerebro.addanalyzer(bt.analyzers.TradeAnalyzer, _name="trades")
 
-            # 创建带回调的策略类，传入取消检查函数
             CallbackStrategy = create_strategy_with_callback(
                 GraphSignalStrategy,
-                backtest_queue,
-                cancel_check_fn=is_backtest_cancelled,
+                session.data_queue,
+                cancel_check_fn=lambda: session.cancelled,
             )
 
             cerebro.addstrategy(
@@ -559,20 +840,19 @@ async def backtest_stream(req: BacktestRequest):
             )
 
             result_holder["start_value"] = float(cerebro.broker.getvalue())
-            print(f"[StreamBacktest] 开始运行回测...")
+            print(f"[StreamBacktest:{sid}] 开始运行回测...")
 
-            # 检查是否已取消
-            if backtest_cancelled:
-                print(f"[StreamBacktest] 回测在运行前被取消")
-                backtest_done = True
+            if session.cancelled:
+                print(f"[StreamBacktest:{sid}] 回测在运行前被取消")
+                session.done = True
                 return
 
             results = cerebro.run()
 
-            if backtest_cancelled:
-                print(f"[StreamBacktest] 回测被取消")
+            if session.cancelled:
+                print(f"[StreamBacktest:{sid}] 回测被取消")
             else:
-                print(f"[StreamBacktest] 回测完成!")
+                print(f"[StreamBacktest:{sid}] 回测完成!")
 
             if results:
                 strategy = results[0]
@@ -585,42 +865,41 @@ async def backtest_stream(req: BacktestRequest):
                         "sharpe": strategy.analyzers.sharpe.get_analysis(),
                         "trades": strategy.analyzers.trades.get_analysis(),
                     }
-                except:
+                except Exception:
                     pass
 
             result_holder["done"] = True
 
         except Exception as e:
-            print(f"[StreamBacktest] 错误: {e}")
+            print(f"[StreamBacktest:{sid}] 错误: {e}")
             import traceback
 
             traceback.print_exc()
             result_holder["error"] = str(e)
             result_holder["done"] = True
+        finally:
+            session.done = True
 
     async def event_generator():
         """生成器：从队列读取数据并yield"""
-        global backtest_cancelled
 
-        # 启动后台线程
-        thread = threading.Thread(target=run_backtest)
+        thread = threading.Thread(target=run_backtest, daemon=True)
         thread.start()
 
-        # 发送开始事件
-        # 计算总天数
-        total_days_estimate = 252  # 默认252个交易日
+        total_days_estimate = 252
         if req.end:
             try:
                 start_date = pd.to_datetime(req.start)
                 end_date = pd.to_datetime(req.end)
                 total_days_estimate = len(pd.bdate_range(start_date, end_date))
-            except:
+            except Exception:
                 pass
 
         yield {
             "event": "start",
             "data": json.dumps(
                 {
+                    "session_id": sid,
                     "symbol": req.symbol,
                     "message": "回测开始",
                     "period": {"start": req.start, "end": req.end},
@@ -631,15 +910,13 @@ async def backtest_stream(req: BacktestRequest):
         }
 
         total_days = 0
-        max_wait = 7200  # 120分钟超时（回测可能需要很长时间）
+        max_wait = settings.backtest_timeout
         waited = 0
-        last_data_time = asyncio.get_event_loop().time()  # 记录最后收到数据的时间
+        last_data_time = asyncio.get_event_loop().time()
 
-        # 循环读取队列数据
-        while not result_holder["done"] or not backtest_queue.empty():
-            # 检查是否被取消
-            if backtest_cancelled:
-                print("[StreamBacktest] 检测到取消信号，停止事件生成")
+        while not result_holder["done"] or not session.data_queue.empty():
+            if session.cancelled:
+                print(f"[StreamBacktest:{sid}] 检测到取消信号，停止事件生成")
                 yield {
                     "event": "cancelled",
                     "data": json.dumps(
@@ -650,11 +927,9 @@ async def backtest_stream(req: BacktestRequest):
                 return
 
             try:
-                # 非阻塞获取数据
-                state = backtest_queue.get(block=False)
+                state = session.data_queue.get(block=False)
                 total_days += 1
 
-                # 构建每日结果 - 包含OHLCV和信号信息
                 daily_result = {
                     "date": str(state["date"]),
                     "cash": float(state["cash"]),
@@ -667,7 +942,6 @@ async def backtest_stream(req: BacktestRequest):
                     "avg_cost": (
                         float(state["avg_cost"]) if state["avg_cost"] is not None else 0
                     ),
-                    # OHLCV 数据
                     "open_price": float(state.get("open_price", state["close_price"])),
                     "high_price": float(state.get("high_price", state["close_price"])),
                     "low_price": float(state.get("low_price", state["close_price"])),
@@ -676,10 +950,6 @@ async def backtest_stream(req: BacktestRequest):
                     "day_number": total_days,
                 }
 
-                # 如果有信号信息，添加到结果中
-                print(
-                    f"[StreamBacktest] Day {total_days}: signal in state={'signal' in state}, state['signal']={state.get('signal')}"
-                )
                 if "signal" in state and state["signal"]:
                     daily_result["signal"] = {
                         "vote": state["signal"].get("vote", ""),
@@ -689,36 +959,24 @@ async def backtest_stream(req: BacktestRequest):
                         ),
                         "reason": state["signal"].get("reason", ""),
                     }
-                    print(
-                        f"[StreamBacktest] Day {total_days}: signal={daily_result['signal']}"
-                    )
 
                 yield {
                     "event": "daily_update",
                     "data": json.dumps(daily_result, ensure_ascii=False, default=str),
                 }
 
-                # 更新最后收到数据的时间
                 last_data_time = asyncio.get_event_loop().time()
-
-                # 让出控制权，确保数据及时发送
                 await asyncio.sleep(0.01)
 
             except queue.Empty:
-                # 队列为空，等待一下
                 if not result_holder["done"]:
                     await asyncio.sleep(0.1)
                     waited += 0.1
 
-                    # 检查是否长时间没有收到数据（可能是卡住了）
                     time_since_last_data = (
                         asyncio.get_event_loop().time() - last_data_time
                     )
-                    if time_since_last_data > 300:  # 5分钟没有数据
-                        print(
-                            f"[StreamBacktest] 警告: {time_since_last_data:.0f}秒没有收到数据"
-                        )
-                        # 发送心跳保持连接
+                    if time_since_last_data > 300:
                         yield {
                             "event": "ping",
                             "data": json.dumps(
@@ -726,7 +984,7 @@ async def backtest_stream(req: BacktestRequest):
                                 ensure_ascii=False,
                             ),
                         }
-                        last_data_time = asyncio.get_event_loop().time()  # 重置时间
+                        last_data_time = asyncio.get_event_loop().time()
 
                     if waited > max_wait:
                         yield {
@@ -738,13 +996,10 @@ async def backtest_stream(req: BacktestRequest):
                         }
                         return
 
-        # 等待线程结束
         thread.join(timeout=5)
 
-        # 发送最终结果
-        if backtest_cancelled:
-            # 回测被取消，不发送最终结果
-            print("[StreamBacktest] 回测已被取消，跳过最终结果")
+        if session.cancelled:
+            print(f"[StreamBacktest:{sid}] 回测已被取消，跳过最终结果")
         elif result_holder["error"]:
             yield {
                 "event": "error",
@@ -754,6 +1009,7 @@ async def backtest_stream(req: BacktestRequest):
             }
         elif result_holder["strategy"]:
             final_result = {
+                "session_id": sid,
                 "symbol": req.symbol,
                 "start_value": result_holder["start_value"],
                 "end_value": result_holder["end_value"],
@@ -776,20 +1032,30 @@ async def backtest_stream(req: BacktestRequest):
 
     return EventSourceResponse(
         event_generator(),
-        ping=15,  # 每15秒发送一次ping保持连接
+        ping=15,
         ping_message_factory=lambda: {"event": "ping", "data": "{}"},
     )
 
 
 @app.post("/api/v1/backtest-cancel")
-async def cancel_backtest():
+async def cancel_backtest(session_id: Optional[str] = None):
     """
-    取消正在进行的回测
+    取消正在进行的回测（按 session_id 隔离）
     """
-    global backtest_cancelled
-    backtest_cancelled = True
-    print("[Backtest] 收到取消请求")
-    return {"success": True, "message": "回测取消信号已发送"}
+    if session_id and session_id in backtest_sessions:
+        backtest_sessions[session_id].cancelled = True
+        print(f"[Backtest:{session_id}] 收到取消请求")
+        return {"success": True, "message": f"回测 {session_id} 取消信号已发送"}
+    # 兜底：取消所有活跃会话
+    cancelled = []
+    for sid, s in backtest_sessions.items():
+        if not s.done:
+            s.cancelled = True
+            cancelled.append(sid)
+    if cancelled:
+        print(f"[Backtest] 批量取消: {cancelled}")
+        return {"success": True, "message": f"已取消 {len(cancelled)} 个回测会话", "cancelled_sessions": cancelled}
+    return {"success": False, "message": "没有活跃的回测会话"}
 
 
 @app.get("/api/v1/backtest-chart")
@@ -877,4 +1143,4 @@ async def health():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host=settings.api_host, port=settings.api_port)

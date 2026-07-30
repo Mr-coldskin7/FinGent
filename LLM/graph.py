@@ -3,6 +3,12 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 
 try:
+    from config import get_settings as _get_settings
+    _config = _get_settings()
+except Exception:
+    _config = None
+
+try:
     from LLM.preprocess import Preprocessor
     from LLM.router import Router
     from LLM.agent import TECHNICAL_NERD, Morefit
@@ -22,6 +28,11 @@ except ImportError:
         get_stock_company_info,
         get_stock_financial_report_links,
     )
+
+try:
+    from Data.memory import get_memory_manager
+except ImportError:
+    get_memory_manager = None
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 from langchain_openai import ChatOpenAI
 import os
@@ -87,11 +98,13 @@ class FinGraph:
         router: Router,
         agent: dict = None,
         checkpointer=None,
+        memory_manager=None,
     ):
         self.preprocessor = preprocessor
         self.router = router
         self.agent = agent or {}
         self.checkpointer = checkpointer or MemorySaver()
+        self.memory_manager = memory_manager
         self.graph = self._build_graph()
 
     def _build_graph(self):
@@ -205,7 +218,12 @@ class FinGraph:
         print(f"│  调用 {agent_name} Agent 分析中...")
 
         # 统一底层执行
-        result = await self._run_single_agent_async(agent_name, stock, state)
+        result = await self._run_single_agent_async(
+            agent_name,
+            stock,
+            state,
+            user_id=state.get("user_id", "anonymous"),
+        )
 
         # 生成文本结果（根据解析器类型）
         config = AGENT_CONFIG[agent_name]
@@ -234,7 +252,11 @@ class FinGraph:
     # 统一底层：执行单个 Agent（异步，被 _execute_agent 和 _run_all_agents 共用）
     # -------------------------------------------------------------------------
     async def _run_single_agent_async(
-        self, agent_name: str, stock: str, state: GraphStatus
+        self,
+        agent_name: str,
+        stock: str,
+        state: GraphStatus,
+        user_id: Optional[str] = None,
     ) -> dict:
         agent = self.agent.get(agent_name)
         config = AGENT_CONFIG.get(agent_name, {})
@@ -257,8 +279,13 @@ class FinGraph:
             prompt = f"请分析股票：{stock}\n\n用户问题：{state['input']}"
         agent_thread_id = f"{state['thread_id']}_{agent_name}_{id(state)}"
 
-        # 执行 Agent
-        response = await agent.achat(prompt, thread_id=agent_thread_id)
+        # 执行 Agent（传入 stock 和 user_id 以触发 L3 记忆注入）
+        response = await agent.achat(
+            prompt,
+            thread_id=agent_thread_id,
+            stock=stock,
+            user_id=user_id,
+        )
 
         # 收集工具调用链
         tool_chain = self._extract_tool_chain(response.messages)
@@ -389,7 +416,14 @@ class FinGraph:
             return {"agent_results": {}, "stock": stock, "status": "voting_ready"}
 
         tasks = [
-            asyncio.create_task(self._run_single_agent_async(name, stock, state))
+            asyncio.create_task(
+                self._run_single_agent_async(
+                    name,
+                    stock,
+                    state,
+                    user_id=state.get("user_id", "anonymous"),
+                )
+            )
             for name in agent_names
         ]
         results = await asyncio.gather(*tasks)
@@ -407,9 +441,9 @@ class FinGraph:
         }
 
     # -------------------------------------------------------------------------
-    # 通用投票汇总 — 遍历 agent_results，不再硬编码具体 Agent
+    # 通用投票汇总 — 遍历 agent_results，支持动态权重
     # -------------------------------------------------------------------------
-    def _voting(self, state: GraphStatus) -> dict:
+    async def _voting(self, state: GraphStatus) -> dict:
         print(f"\n┌─ [VOTING] 投票汇总")
 
         agent_results = state.get("agent_results") or {}
@@ -421,81 +455,90 @@ class FinGraph:
         first = next(iter(agent_results.values()))
         symbol = first.get("symbol", "UNKNOWN")
 
-        # 收集投票
-        votes = [r.get("vote", "HOLD") for r in agent_results.values()]
-        buy_count = votes.count("BUY")
-        sell_count = votes.count("SELL")
-        agent_count = len(votes)
+        # 获取 Agent 权重（如果 memory_manager 可用）
+        agent_names = list(agent_results.keys())
+        weights = {name: 1.0 for name in agent_names}
+        if self.memory_manager:
+            try:
+                loaded = await self.memory_manager.get_agent_weights(
+                    user_id="global", agent_names=agent_names
+                )
+                weights.update(loaded)
+            except Exception as e:
+                print(f"│  ⚠️ 权重加载失败: {e}")
+
+        # 加权投票统计
+        weighted_buy = 0.0
+        weighted_sell = 0.0
+        weighted_reduce = 0.0
+        weighted_hold = 0.0
+        weighted_target_pct = 0.0
+        total_weight = 0.0
 
         print(f"│  股票: {symbol}")
         for name, r in agent_results.items():
+            w = weights.get(name, 1.0)
+            vote = r.get("vote", "HOLD")
+            pct = r.get("target_position_pct", 0.5)
+            conf = r.get("confidence", 0.75)
             print(
-                f"│  {name}: {r.get('vote', 'HOLD')} "
-                f"(仓位{r.get('target_position_pct', 0.5)*100:.0f}%, "
-                f"置信度{r.get('confidence', 0.75)*100:.0f}%)"
+                f"│  {name}: {vote} "
+                f"(仓位{pct*100:.0f}%, 置信度{conf*100:.0f}%, 权重{w:.2f})"
             )
+            if vote in ("BUY", "STRONG_BUY"):
+                weighted_buy += w
+            elif vote in ("SELL", "STRONG_SELL"):
+                weighted_sell += w
+            elif vote == "REDUCE":
+                weighted_reduce += w
+            else:
+                weighted_hold += w
+            weighted_target_pct += pct * w
+            total_weight += w
 
-        # 投票逻辑（动态适应任意数量 Agent）
-        # 也处理 RiskManager 的 "REDUCE" 投票
-        reduce_count = votes.count("REDUCE")
+        # 归一化
+        norm_buy = weighted_buy / total_weight if total_weight else 0
+        norm_sell = weighted_sell / total_weight if total_weight else 0
+        norm_reduce = weighted_reduce / total_weight if total_weight else 0
+        norm_hold = weighted_hold / total_weight if total_weight else 0
+        avg_target_pct = weighted_target_pct / total_weight if total_weight else 0.4
 
-        if buy_count == agent_count and agent_count > 0:
+        # 决策阈值（可配置）
+        strong_th = _config.vote_strong_threshold if _config else 0.75
+        majority_th = _config.vote_majority_threshold if _config else 0.4
+        reduce_th = _config.vote_reduce_threshold if _config else 0.4
+
+        # 决策逻辑
+        if norm_buy >= strong_th:
             final_vote, confidence, suggestion = (
                 "STRONG_BUY",
-                90,
-                "全体看多，建议大胆买入",
+                int(70 + norm_buy * 30),
+                "加权全体看多，建议大胆买入",
             )
-            target_pct = min(
-                0.8,
-                sum(r.get("target_position_pct", 0.5) for r in agent_results.values())
-                / agent_count
-                * 1.2,
-            )
-        elif buy_count > 0 and sell_count == 0 and reduce_count == 0:
-            final_vote, confidence, suggestion = "BUY", 70, "多数看多，可考虑买入"
-            target_pct = (
-                sum(
-                    r.get("target_position_pct", 0.5)
-                    for r in agent_results.values()
-                    if r.get("vote") == "BUY"
-                )
-                / buy_count
-                * 0.6
-            )
-        elif sell_count == agent_count and agent_count > 0:
+            target_pct = min(0.8, avg_target_pct * 1.2)
+        elif norm_buy > majority_th and norm_sell == 0 and norm_reduce == 0:
+            final_vote, confidence, suggestion = "BUY", int(50 + norm_buy * 40), "加权多数看多，可考虑买入"
+            target_pct = avg_target_pct * 0.8
+        elif norm_sell >= strong_th:
             final_vote, confidence, suggestion = (
                 "STRONG_SELL",
-                90,
-                "全体看空，建议果断卖出",
+                int(70 + norm_sell * 30),
+                "加权全体看空，建议果断卖出",
             )
             target_pct = 0.0
-        elif sell_count > 0 and buy_count == 0:
-            final_vote, confidence, suggestion = "SELL", 70, "多数看空，建议减仓"
+        elif norm_sell > majority_th and norm_buy == 0:
+            final_vote, confidence, suggestion = "SELL", int(50 + norm_sell * 40), "加权多数看空，建议减仓"
             target_pct = 0.1
-        elif reduce_count > 0 and buy_count == 0 and sell_count == 0:
+        elif norm_reduce > reduce_th and norm_buy == 0 and norm_sell == 0:
             final_vote, confidence, suggestion = (
                 "REDUCE",
-                60,
-                "风险指标提示减仓，建议降低仓位",
+                int(40 + norm_reduce * 40),
+                "加权风险指标提示减仓，建议降低仓位",
             )
-            target_pct = (
-                sum(
-                    r.get("target_position_pct", 0.5)
-                    for r in agent_results.values()
-                    if r.get("vote") == "REDUCE"
-                )
-                / reduce_count
-                * 0.5
-            )
+            target_pct = avg_target_pct * 0.5
         else:
-            final_vote, confidence, suggestion = "HOLD", 50, "分歧或观望，建议持有"
-            avg_pct = (
-                sum(r.get("target_position_pct", 0.5) for r in agent_results.values())
-                / agent_count
-                if agent_count
-                else 0.4
-            )
-            target_pct = max(0.3, min(0.5, avg_pct))
+            final_vote, confidence, suggestion = "HOLD", int(30 + max(norm_buy, norm_sell, norm_hold) * 40), "加权分歧或观望，建议持有"
+            target_pct = max(0.3, min(0.5, avg_target_pct))
 
         print(
             f"│  📊 最终决策: {final_vote} (置信度: {confidence}%, 目标仓位: {target_pct*100:.0f}%)"
@@ -507,6 +550,7 @@ class FinGraph:
         result_parts = []
 
         for agent_name, result in agent_results.items():
+            w = weights.get(agent_name, 1.0)
             decisions.append(
                 {
                     "symbol": result.get("symbol", symbol),
@@ -514,6 +558,7 @@ class FinGraph:
                     "reason": result.get("reason", ""),
                     "target_position_pct": result.get("target_position_pct", 0.5),
                     "confidence": result.get("confidence", 0.7),
+                    "weight": w,
                 }
             )
             if result.get("tool_chain"):
@@ -522,7 +567,7 @@ class FinGraph:
                 )
 
             result_parts.append(
-                f"### 🤖 {agent_name}\n\n"
+                f"### 🤖 {agent_name} (权重: {w:.2f})\n\n"
                 f"**投票**: {result.get('vote', 'HOLD')} | "
                 f"**建议仓位**: {result.get('target_position_pct', 0.5)*100:.0f}% | "
                 f"**置信度**: {result.get('confidence', 0.7)*100:.0f}%\n\n"
@@ -551,7 +596,7 @@ class FinGraph:
         result_text = (
             f"## 📊 多Agent综合分析 - {symbol}\n\n"
             f"---\n\n" + "\n\n---\n\n".join(result_parts) + f"\n\n---\n\n"
-            f"### 🎯 最终投票结果\n\n"
+            f"### 🎯 最终加权投票结果\n\n"
             f"**综合决策**: {final_vote} (置信度: {confidence}%)  \n"
             f"**建议仓位**: {target_pct*100:.0f}%  \n"
             f"**操作建议**: {suggestion}"
@@ -588,7 +633,12 @@ class FinGraph:
     # -------------------------------------------------------------------------
     # 对外接口
     # -------------------------------------------------------------------------
-    async def run(self, user_input: str, thread_id: str = None) -> dict:
+    async def run(
+        self,
+        user_input: str,
+        thread_id: str = None,
+        user_id: Optional[str] = None,
+    ) -> dict:
         thread_id = thread_id or "default_thread"
         config = {"configurable": {"thread_id": thread_id}}
 
@@ -618,6 +668,7 @@ class FinGraph:
             "clarification_count": count,
             "agent_results": None,
             "final_decision": None,
+            "user_id": user_id or "anonymous",
         }
 
         async for event in self.graph.astream(initial_state, config=config):
@@ -630,15 +681,51 @@ class FinGraph:
             print(f"\n⏸️ 等待用户澄清...")
             return final_values
 
+        # Passive + Active Self-Improve: record analysis & check consistency
+        if final_values.get("status") == "completed" and self.memory_manager:
+            try:
+                stock = final_values.get("stock", "UNKNOWN")
+                agent_results = final_values.get("agent_results", {})
+                final_decision = final_values.get("final_decision", {})
+                votes = {
+                    name: r.get("vote", "HOLD")
+                    for name, r in agent_results.items()
+                }
+                user_id = final_values.get("user_id", "anonymous")
+                await self.memory_manager.record_analysis(
+                    session_id=thread_id,
+                    stock_symbol=stock,
+                    query=user_input,
+                    agent_votes=votes,
+                    final_decision=final_decision.get("final_vote", "HOLD"),
+                    reasoning_summary=final_decision.get("suggestion", ""),
+                    user_id=user_id,
+                )
+                # Active: check for inconsistencies with recent history
+                inconsistency = await self.memory_manager.find_inconsistencies(
+                    user_id=user_id,
+                    stock_symbol=stock,
+                    current_decision=final_decision.get("final_vote", "HOLD"),
+                )
+                if inconsistency:
+                    print(f"│  ⚠️ Self-Improve: {inconsistency}")
+            except Exception as e:
+                print(f"│  ⚠️ L3 record failed: {e}")
+
         print(f"\n{'='*60}")
         print(f"✅ Graph 运行完成")
         print(f"{'='*60}")
         return final_values
 
-    async def resume(self, user_input: str, thread_id: str) -> dict:
+    async def resume(
+        self,
+        user_input: str,
+        thread_id: str,
+        user_id: Optional[str] = None,
+    ) -> dict:
         print(f"\n🔄 [resume] 用户回复澄清 | thread: {thread_id}")
         print(f"   用户回复: '{user_input}'")
-        return await self.run(user_input, thread_id)
+        return await self.run(user_input, thread_id, user_id=user_id)
 
 
 # =============================================================================
@@ -646,7 +733,7 @@ class FinGraph:
 # =============================================================================
 
 
-def _create_test_agents(checkpointer):
+def _create_test_agents(checkpointer, memory_manager=None):
     """统一构造测试 Agent 实例"""
     from LLM.agent import RiskManager, SentimentAnalyzer
     from LLM.risk_tools import RISK_TOOLS
@@ -668,6 +755,7 @@ def _create_test_agents(checkpointer):
             model=model,
             tools=[get_stock_price, get_stock_basic_info],
             checkpointer=checkpointer,
+            memory_manager=memory_manager,
         ),
         "Morefit": Morefit(
             model=model,
@@ -678,12 +766,13 @@ def _create_test_agents(checkpointer):
                 get_stock_basic_info,
             ],
             checkpointer=checkpointer,
+            memory_manager=memory_manager,
         ),
         "RiskManager": RiskManager(
-            model=model, tools=RISK_TOOLS, checkpointer=checkpointer
+            model=model, tools=RISK_TOOLS, checkpointer=checkpointer, memory_manager=memory_manager
         ),
         "SentimentAnalyzer": SentimentAnalyzer(
-            model=model, tools=SENTIMENT_TOOLS, checkpointer=checkpointer
+            model=model, tools=SENTIMENT_TOOLS, checkpointer=checkpointer, memory_manager=memory_manager
         ),
     }
 
@@ -692,6 +781,7 @@ def _create_test_agents(checkpointer):
         router=router,
         agent=agents,
         checkpointer=checkpointer,
+        memory_manager=memory_manager,
     )
     return fin_graph
 

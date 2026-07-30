@@ -10,6 +10,8 @@ export interface BacktestRequest {
   min_confidence: number;
   rebalance_threshold: number;
   temperature: number;
+  session_id?: string;
+  interval: 'daily' | 'weekly' | 'monthly' | 'annually';
 }
 
 export interface BacktestResult {
@@ -87,4 +89,5 @@ export const DEFAULT_BACKTEST_CONFIG: BacktestRequest = {
   min_confidence: 0.0,
   rebalance_threshold: 0.02,
   temperature: 0.0,
+  interval: 'daily',
 };

@@ -9,9 +9,10 @@ import InputArea from './components/InputArea.vue';
 import ThinkingChain from './components/ThinkingChain.vue';
 import BacktestPanel from './components/BacktestPanel.vue';
 import MarketPanel from './components/MarketPanel.vue';
+import SettingsPanel from './components/SettingsPanel.vue';
 import type { Message, ChatResponse, AnalysisData } from './types/index';
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
 const userInput = ref('');
 const messages = ref<Message[]>([]);
@@ -19,7 +20,33 @@ const loading = ref(false);
 const threadId = ref<string | null>(null);
 const needsClarification = ref(false);
 const messagesEndRef = ref<HTMLElement | null>(null);
-const currentView = ref<'chat' | 'backtest' | 'market'>('chat');
+const currentView = ref<'chat' | 'backtest' | 'market' | 'settings'>('chat');
+
+const userId = ref(localStorage.getItem('fingent_user_id') || '');
+if (!userId.value) {
+  userId.value = `user_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  localStorage.setItem('fingent_user_id', userId.value);
+}
+
+const feedbackLoading = ref(false);
+const reviewLoading = ref(false);
+const correctionText = ref('');
+const showCorrection = ref(false);
+const feedbackMessage = ref('');
+const reviewSummary = ref('');
+const feedbackError = ref<string | null>(null);
+
+const lastAssistantMessage = computed(() => {
+  return [...messages.value].reverse().find((m) => m.role === 'assistant') || null;
+});
+
+const feedbackEligible = computed(() => {
+  const msg = lastAssistantMessage.value;
+  return !!(
+    msg &&
+    (msg.stock || msg.finalDecision || msg.raw?.stock || msg.content?.length > 0)
+  );
+});
 
 // 从行情页面跳转到分析
 const quickAnalyze = (symbol: string, name: string) => {
@@ -193,13 +220,20 @@ function generateThinkingSteps(data: ChatResponse): any[] {
   }
   
   // 6. 最终结论
-  if (data.detailed_analysis?.final_decision || data.final_decision) {
-    const final = data.detailed_analysis?.final_decision || data.final_decision;
+  const finalDecision = data.detailed_analysis?.final_decision || data.final_decision;
+  if (finalDecision) {
+    const isFinalDecisionObject = 'final_vote' in finalDecision;
+    const vote = isFinalDecisionObject
+      ? finalDecision.final_vote
+      : finalDecision.vote;
+    const text = isFinalDecisionObject
+      ? finalDecision.suggestion || ''
+      : finalDecision.reason || '';
     steps.push({
       id: `step-${stepId++}`,
       type: 'conclusion',
       title: '最终决策',
-      content: final?.vote ? `${final.vote} - ${final.reason || '综合分析后的建议'}` : '完成分析',
+      content: vote ? `${vote} - ${text || '综合分析后的建议'}` : '完成分析',
       status: 'completed'
     });
   }
@@ -221,7 +255,7 @@ function extractJsonFromMarkdown(text: string): any | null {
   } catch {
     // 尝试从 markdown 代码块中提取
     const jsonMatch = text.match(/```json\s*([\s\S]*?)\s*```/);
-    if (jsonMatch) {
+    if (jsonMatch && jsonMatch[1]) {
       try {
         return JSON.parse(jsonMatch[1]);
       } catch {
@@ -319,6 +353,11 @@ const sendMessage = async () => {
   userInput.value = '';
   loading.value = true;
   needsClarification.value = false;
+  feedbackMessage.value = '';
+  reviewSummary.value = '';
+  feedbackError.value = null;
+  showCorrection.value = false;
+  correctionText.value = '';
   
   // 重置思维链
   thinkingSteps.value = [];
@@ -330,7 +369,8 @@ const sendMessage = async () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         user_input: input,
-        thread_id: threadId.value
+        thread_id: threadId.value,
+        user_id: userId.value,
       })
     });
 
@@ -391,6 +431,114 @@ const clearChat = () => {
   userInput.value = '';
   thinkingSteps.value = [];
   showThinkingChain.value = false;
+  feedbackMessage.value = '';
+  reviewSummary.value = '';
+  feedbackError.value = null;
+  correctionText.value = '';
+  showCorrection.value = false;
+};
+
+const submitFeedback = async (feedbackType: 'agree' | 'disagree' | 'correction') => {
+  const msg = lastAssistantMessage.value;
+  if (!msg || !msg.stock) {
+    feedbackMessage.value = '当前回复中未识别到股票，无法提交反馈。';
+    return;
+  }
+  if (feedbackType === 'correction' && !correctionText.value.trim()) {
+    feedbackMessage.value = '请填写纠正规则内容后再提交。';
+    return;
+  }
+
+  feedbackLoading.value = true;
+  feedbackMessage.value = '';
+  feedbackError.value = null;
+
+  try {
+    const payload: any = {
+      session_id: threadId.value || '',
+      stock_symbol: msg.stock,
+      agent_name: msg.agentName || undefined,
+      feedback: feedbackType,
+      user_id: userId.value,
+    };
+    if (feedbackType === 'correction') {
+      payload.rule_text = correctionText.value.trim();
+    }
+
+    const res = await fetch(`${API_BASE}/api/v1/feedback`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      feedbackMessage.value =
+        feedbackType === 'agree'
+          ? '已记录赞同反馈，Agent 权重已提升。'
+          : feedbackType === 'disagree'
+          ? '已记录不同意反馈，Agent 权重已降低。'
+          : '已记录纠正反馈，并保存用户规则。';
+      if (feedbackType === 'correction') {
+        showCorrection.value = false;
+      }
+    } else {
+      feedbackMessage.value = `反馈失败：${data.error || '未知错误'}`;
+    }
+  } catch (error: any) {
+    feedbackError.value = error?.message || '网络请求失败';
+  } finally {
+    feedbackLoading.value = false;
+  }
+};
+
+const submitReview = async () => {
+  const msg = lastAssistantMessage.value;
+  if (!msg || !msg.stock) {
+    reviewSummary.value = '当前回复中未识别到股票，无法执行复盘。';
+    return;
+  }
+
+  reviewLoading.value = true;
+  reviewSummary.value = '';
+  feedbackError.value = null;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        session_id: threadId.value || undefined,
+        stock_symbol: msg.stock,
+        user_id: userId.value,
+      }),
+    });
+    const data = await res.json();
+    if (data.success) {
+      const review = data.review;
+      const historyLines = review.recent_history
+        .map(
+          (item: any) =>
+            `${item.created_at.slice(0, 10)} → ${item.final_decision}` +
+            (item.user_feedback ? ` (${item.user_feedback})` : ''),
+        )
+        .join('\n');
+      reviewSummary.value =
+        `复盘结果：\n` +
+        `股票：${review.stock_symbol}\n` +
+        `当前决策：${review.current_decision}\n` +
+        `${review.reasoning_summary ? `理由：${review.reasoning_summary}\n` : ''}` +
+        `${review.user_feedback ? `用户反馈：${review.user_feedback}\n` : ''}` +
+        `${review.inconsistency_warning ? `警告：${review.inconsistency_warning}\n` : ''}` +
+        `历史回顾：\n${historyLines}`;
+    } else {
+      reviewSummary.value = `复盘失败：${data.error || '未知错误'}`;
+    }
+  } catch (error: any) {
+    reviewSummary.value = `网络错误：${error?.message || '请求失败'}`;
+  } finally {
+    reviewLoading.value = false;
+  }
 };
 
 const quickInput = (text: string) => {
@@ -477,6 +625,47 @@ const quickInput = (text: string) => {
             <LoadingBubble v-if="loading" />
             <div ref="messagesEndRef" />
           </div>
+
+          <div v-if="feedbackEligible" class="feedback-panel">
+            <div class="feedback-panel-header">
+              <span>📌 对本次分析进行反馈 / 复盘</span>
+              <span class="feedback-user">用户ID: {{ userId }}</span>
+            </div>
+            <div class="feedback-actions">
+              <button @click="submitFeedback('agree')" :disabled="feedbackLoading || reviewLoading">
+                👍 同意
+              </button>
+              <button @click="submitFeedback('disagree')" :disabled="feedbackLoading || reviewLoading">
+                👎 不同意
+              </button>
+              <button @click="showCorrection = !showCorrection" :disabled="feedbackLoading || reviewLoading">
+                ✍️ 纠正规则
+              </button>
+              <button @click="submitReview" :disabled="reviewLoading || feedbackLoading">
+                🔍 复盘历史
+              </button>
+            </div>
+            <div v-if="showCorrection" class="feedback-correction">
+              <textarea
+                v-model="correctionText"
+                placeholder="请输入纠正内容，例如：不要过度解读单日放量"
+                rows="3"
+              />
+              <button
+                class="submit-correction"
+                @click="submitFeedback('correction')"
+                :disabled="feedbackLoading || !correctionText.trim()"
+              >
+                提交纠正
+              </button>
+            </div>
+            <div class="feedback-status">
+              <div v-if="feedbackMessage" class="feedback-message">{{ feedbackMessage }}</div>
+              <div v-if="feedbackError" class="feedback-error">{{ feedbackError }}</div>
+              <div v-if="reviewSummary" class="review-summary"><pre>{{ reviewSummary }}</pre></div>
+            </div>
+          </div>
+
         </div>
 
         <!-- Input Area -->
@@ -491,6 +680,13 @@ const quickInput = (text: string) => {
       <!-- 行情视图 -->
       <template v-else-if="currentView === 'market'">
         <MarketPanel @analyze="quickAnalyze" />
+      </template>
+
+      <!-- 设置视图 -->
+      <template v-else-if="currentView === 'settings'">
+        <div class="settings-view">
+          <SettingsPanel />
+        </div>
       </template>
 
       <!-- 回测视图 -->
@@ -702,6 +898,99 @@ body {
   gap: 1.5rem;
 }
 
+.feedback-panel {
+  margin: 1rem auto 0;
+  max-width: 56rem;
+  background: #ffffff;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 1rem;
+  padding: 1rem;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.04);
+}
+
+.feedback-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+  color: #334155;
+  font-weight: 600;
+}
+
+.feedback-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.feedback-actions button {
+  border: none;
+  padding: 0.8rem 1rem;
+  border-radius: 9999px;
+  background: #0ea5e9;
+  color: white;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+.feedback-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.feedback-actions button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.feedback-correction {
+  margin-bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.feedback-correction textarea {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.4);
+  border-radius: 0.75rem;
+  padding: 0.9rem 1rem;
+  resize: vertical;
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+
+.submit-correction {
+  align-self: flex-end;
+  padding: 0.75rem 1rem;
+  border-radius: 9999px;
+  background: #10b981;
+}
+
+.feedback-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.feedback-message,
+.review-summary {
+  color: #0f172a;
+  font-size: 0.95rem;
+  white-space: pre-wrap;
+}
+
+.feedback-error {
+  color: #b91c1c;
+  font-size: 0.95rem;
+}
+
+.feedback-user {
+  color: #64748b;
+  font-size: 0.85rem;
+}
+
 .backtest-view {
   flex: 1;
   overflow-y: auto;
@@ -719,5 +1008,12 @@ body {
 .backtest-view::-webkit-scrollbar-thumb {
   background: rgba(0, 0, 0, 0.1);
   border-radius: 3px;
+}
+
+.settings-view {
+  flex: 1;
+  overflow-y: auto;
+  padding: 2rem;
+  background: #f8fafc;
 }
 </style>

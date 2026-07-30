@@ -17,8 +17,16 @@ fmp_api_key = os.getenv("FMP_API_KEY")
 tiingo_api_key = os.getenv("TIINGO_API_KEY")
 warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
 _HEADERS = {"User-Agent": "hw2258@bath.ac.uk"}
-# 文件级异步 HTTP 客户端（复用连接池）
-_async_client = httpx.AsyncClient(headers=_HEADERS)
+
+# 代理配置（从环境变量读取）
+_PROXY = os.getenv("HTTPS_PROXY") or os.getenv("HTTP_PROXY") or None
+
+# 文件级异步 HTTP 客户端（复用连接池，支持代理和超时）
+_async_client = httpx.AsyncClient(
+    headers=_HEADERS,
+    proxy=_PROXY,
+    timeout=httpx.Timeout(30.0, connect=10.0),
+)
 
 
 # ===============================================================================

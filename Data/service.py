@@ -42,7 +42,16 @@ class InfoService:
         Args:
             cache_ttl: 缓存过期时间（秒），默认5分钟
         """
-        self.cache = CacheManager(default_ttl=cache_ttl)
+        try:
+            from config import get_settings
+            _settings = get_settings()
+            self.cache = CacheManager(
+                default_ttl=cache_ttl,
+                redis_url=_settings.redis_url,
+                redis_ttl=_settings.cache_redis_ttl,
+            )
+        except Exception:
+            self.cache = CacheManager(default_ttl=cache_ttl)
 
     async def fetch(
         self,
