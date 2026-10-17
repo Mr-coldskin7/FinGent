@@ -40,35 +40,35 @@ const voteConfig: Record<VoteType, {
     label: '强烈买入', 
     color: '#34d399', 
     bgColor: 'rgba(16, 185, 129, 0.2)', 
-    icon: '🚀',
+    icon: '',
     gradient: 'linear-gradient(90deg, #10b981, #34d399)'
   },
   BUY: { 
     label: '买入', 
     color: '#4ade80', 
     bgColor: 'rgba(74, 222, 128, 0.2)', 
-    icon: '📈',
+    icon: '',
     gradient: 'linear-gradient(90deg, #22c55e, #4ade80)'
   },
   HOLD: { 
     label: '持有观望', 
     color: '#fbbf24', 
     bgColor: 'rgba(251, 191, 36, 0.2)', 
-    icon: '⏸️',
+    icon: '—',
     gradient: 'linear-gradient(90deg, #f59e0b, #fbbf24)'
   },
   SELL: { 
     label: '卖出', 
     color: '#f87171', 
     bgColor: 'rgba(248, 113, 113, 0.2)', 
-    icon: '📉',
+    icon: '',
     gradient: 'linear-gradient(90deg, #ef4444, #f87171)'
   },
   STRONG_SELL: { 
     label: '强烈卖出', 
     color: '#fb7185', 
     bgColor: 'rgba(251, 113, 133, 0.2)', 
-    icon: '⚠️',
+    icon: '',
     gradient: 'linear-gradient(90deg, #e11d48, #fb7185)'
   },
 };
@@ -94,7 +94,7 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
       <div class="header-content">
         <div class="stock-info">
           <div class="stock-icon-box">
-            <span class="stock-icon">{{ isStockCode ? '📈' : '💼' }}</span>
+            <span class="stock-icon">{{ isStockCode ? '个股' : '组合' }}</span>
           </div>
           <div class="stock-details">
             <h3 class="stock-name">{{ displayName }}</h3>
@@ -103,7 +103,7 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
         </div>
         
         <div class="vote-badge" :style="{ background: config.bgColor, borderColor: config.color + '40' }">
-          <span class="vote-icon">{{ config.icon }}</span>
+          <span v-if="config.icon" class="vote-icon">{{ config.icon }}</span>
           <span class="vote-label" :style="{ color: config.color }">{{ config.label }}</span>
         </div>
       </div>
@@ -129,7 +129,7 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
         <div class="metric-box">
           <div class="metric-header">
             <span class="metric-label">
-              <span class="metric-icon">🎯</span>
+              <span class="metric-icon"></span>
               置信度
             </span>
             <span class="metric-value" :style="{ color: config.color }">{{ confidencePercent.toFixed(0) }}%</span>
@@ -146,7 +146,7 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
         <div v-if="decision.target_position_pct !== undefined" class="metric-box">
           <div class="metric-header">
             <span class="metric-label">
-              <span class="metric-icon">⚖️</span>
+              <span class="metric-icon"></span>
               建议仓位
             </span>
             <span class="metric-value">{{ positionPercent.toFixed(0) }}%</span>
@@ -166,9 +166,9 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
 <style scoped>
 .decision-card {
   animation: slide-up 0.5s ease-out forwards;
-  background: rgba(255, 255, 255, 0.8);
+  background: rgba(11,11,12,0.92);
   backdrop-filter: blur(24px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 1.25rem;
   overflow: hidden;
   transition: transform 0.2s, box-shadow 0.2s;
@@ -182,8 +182,8 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
 .card-header {
   position: relative;
   padding: 1.25rem 1.5rem;
-  background: linear-gradient(to right, rgba(0,0,0,0.02), transparent);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  background: linear-gradient(to right, rgba(255,255,255,0.02), transparent);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
 .header-content {
@@ -206,7 +206,7 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(255,255,255,0.06);
   box-shadow: 0 4px 15px -5px rgba(59, 130, 246, 0.1);
 }
 
@@ -223,13 +223,13 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
 .stock-name {
   font-size: 1.25rem;
   font-weight: 700;
-  color: #1e293b;
+  color: #e4e4e7;
   margin: 0;
 }
 
 .stock-code {
   font-size: 0.8125rem;
-  color: rgba(0, 0, 0, 0.5);
+  color: rgba(255,255,255,0.5);
   margin: 0;
   font-family: monospace;
   letter-spacing: 0.05em;
@@ -290,13 +290,13 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
 .reason-label {
   font-size: 0.6875rem;
   font-weight: 700;
-  color: rgba(0, 0, 0, 0.5);
+  color: rgba(255,255,255,0.5);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
 .reason-text {
-  color: rgba(0, 0, 0, 0.8);
+  color: rgba(255,255,255,0.8);
   font-size: 0.9375rem;
   line-height: 1.85;
   margin: 0;
@@ -310,10 +310,10 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
 }
 
 .metric-box {
-  background: rgba(0, 0, 0, 0.02);
+  background: rgba(255,255,255,0.02);
   border-radius: 0.875rem;
   padding: 1rem;
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  border: 1px solid rgba(255,255,255,0.05);
 }
 
 .metric-header {
@@ -328,7 +328,7 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
   align-items: center;
   gap: 0.375rem;
   font-size: 0.8125rem;
-  color: rgba(0, 0, 0, 0.55);
+  color: rgba(255,255,255,0.55);
 }
 
 .metric-icon {
@@ -343,7 +343,7 @@ const isStockCode = computed(() => /^\d{6}$/.test(props.decision.symbol));
 .progress-bar {
   position: relative;
   height: 0.5rem;
-  background: rgba(0, 0, 0, 0.06);
+  background: rgba(255,255,255,0.06);
   border-radius: 9999px;
   overflow: hidden;
 }

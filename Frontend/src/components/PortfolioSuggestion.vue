@@ -9,7 +9,7 @@ defineProps<Props>();
 <template>
   <div class="portfolio-suggestion">
     <div class="suggestion-header">
-      <span class="icon">💼</span>
+      <span class="icon"></span>
       <span class="title">组合配置建议</span>
     </div>
     <p class="text">{{ suggestion }}</p>
@@ -38,12 +38,12 @@ defineProps<Props>();
 
 .suggestion-header .title {
   font-weight: 600;
-  color: #2563eb;
+  color: #60a5fa;
   font-size: 0.9375rem;
 }
 
 .text {
-  color: rgba(0, 0, 0, 0.75);
+  color: rgba(255,255,255,0.75);
   font-size: 0.9375rem;
   line-height: 1.75;
   margin: 0;

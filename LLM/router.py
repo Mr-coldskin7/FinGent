@@ -20,16 +20,16 @@ json_format = {
 class Router:
     """纯路由决策 - 只返回目标节点名称"""
 
-    # intent → agent 映射表
+    # intent → agent 映射表（值为注册表名，见 LLM/registry.py）
     ROUTES = {
         "MARKET_DATA": "ALL",  # 市场数据 -> 全Agent投票
-        "COMPANY_INFO": "Morefit",  # 公司信息 -> 基本面分析
-        "REPORT_ANALYSIS": "Morefit",  # 财报分析 -> 基本面分析
-        "NEWS_SENTIMENT": "SentimentAnalyzer",  # 新闻情绪 -> 舆情分析Agent
-        "TECHNICAL_ANALYSIS": "TECHNICAL_NERD",  # 技术分析 -> 技术面分析Agent
-        "RISK_MANAGEMENT": "RiskManager",  # 风险管理 -> 风险Agent
-        "PORTFOLIO_RISK": "RiskManager",  # 组合风险 -> 风险Agent
-        "SENTIMENT_CHECK": "SentimentAnalyzer",  # 情绪检查 -> 舆情分析Agent
+        "COMPANY_INFO": "morefit",  # 公司信息 -> 基本面分析
+        "REPORT_ANALYSIS": "morefit",  # 财报分析 -> 基本面分析
+        "NEWS_SENTIMENT": "sentiment-analyzer",  # 新闻情绪 -> 舆情分析Agent
+        "TECHNICAL_ANALYSIS": "technical-nerd",  # 技术分析 -> 技术面分析Agent
+        "RISK_MANAGEMENT": "risk-manager",  # 风险管理 -> 风险Agent
+        "PORTFOLIO_RISK": "risk-manager",  # 组合风险 -> 风险Agent
+        "SENTIMENT_CHECK": "sentiment-analyzer",  # 情绪检查 -> 舆情分析Agent
         "SUGGESTIONS": "ALL",  # 投资建议 -> 全Agent投票
     }
 

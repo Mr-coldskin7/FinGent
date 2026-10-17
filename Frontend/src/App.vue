@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { friendlyError } from './utils/errors';
 import { ref, watch, nextTick, computed } from 'vue';
 import Sidebar from './components/Sidebar.vue';
 import Header from './components/Header.vue';
@@ -10,6 +11,8 @@ import ThinkingChain from './components/ThinkingChain.vue';
 import BacktestPanel from './components/BacktestPanel.vue';
 import MarketPanel from './components/MarketPanel.vue';
 import SettingsPanel from './components/SettingsPanel.vue';
+import EvalPanel from './components/EvalPanel.vue';
+import RulesPanel from './components/RulesPanel.vue';
 import type { Message, ChatResponse, AnalysisData } from './types/index';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -20,7 +23,7 @@ const loading = ref(false);
 const threadId = ref<string | null>(null);
 const needsClarification = ref(false);
 const messagesEndRef = ref<HTMLElement | null>(null);
-const currentView = ref<'chat' | 'backtest' | 'market' | 'settings'>('chat');
+const currentView = ref<'chat' | 'backtest' | 'market' | 'settings' | 'eval' | 'rules'>('chat');
 
 const userId = ref(localStorage.getItem('fingent_user_id') || '');
 if (!userId.value) {
@@ -39,6 +42,14 @@ const feedbackError = ref<string | null>(null);
 const lastAssistantMessage = computed(() => {
   return [...messages.value].reverse().find((m) => m.role === 'assistant') || null;
 });
+
+// 多 Agent 结果：用户可以勾选具体是哪几个 Agent 判断有误/正确（反馈归因）
+const feedbackAgents = computed<string[]>(() => {
+  const agents = lastAssistantMessage.value?.raw?.selected_agents;
+  return Array.isArray(agents) && agents.length > 1 ? agents : [];
+});
+const selectedAgents = ref<string[]>([]);
+watch(lastAssistantMessage, () => { selectedAgents.value = []; });
 
 const feedbackEligible = computed(() => {
   const msg = lastAssistantMessage.value;
@@ -62,6 +73,58 @@ const quickAnalyze = (symbol: string, name: string) => {
 // 思维链步骤
 const thinkingSteps = ref<any[]>([]);
 const showThinkingChain = ref(false);
+
+// 实时分析进度（SSE /chat-stream 推送，用于加载中的动态状态展示）
+interface AgentProgressItem {
+  name: string;
+  status: 'running' | 'done' | 'error';
+  vote?: string;
+}
+const chatProgress = ref<{
+  stage: string;
+  agents: AgentProgressItem[];
+  startedAt: number;
+} | null>(null);
+
+function applyProgressEvent(evt: any) {
+  const p = chatProgress.value;
+  if (!p) return;
+  switch (evt.stage) {
+    case 'preprocess':
+      p.stage = 'preprocess';
+      break;
+    case 'chat':
+      p.stage = 'chat';
+      break;
+    case 'clarify':
+      p.stage = 'clarify';
+      break;
+    case 'sector':
+      p.stage = 'chat';
+      break;
+    case 'voting':
+      p.stage = 'voting';
+      break;
+    case 'agent_start': {
+      p.stage = 'agents';
+      const existing = p.agents.find(a => a.name === evt.agent);
+      if (existing) {
+        existing.status = 'running';
+      } else {
+        p.agents.push({ name: evt.agent, status: 'running' });
+      }
+      break;
+    }
+    case 'agent_done': {
+      const item = p.agents.find(a => a.name === evt.agent);
+      if (item) {
+        item.status = evt.error ? 'error' : 'done';
+        item.vote = evt.vote;
+      }
+      break;
+    }
+  }
+}
 
 // 生成思维链步骤
 function generateThinkingSteps(data: ChatResponse): any[] {
@@ -101,16 +164,50 @@ function generateThinkingSteps(data: ChatResponse): any[] {
     });
   }
   
-  // 3. 路由决策
-  const route = data.parse_result?.intent?.type === 'TECHNICAL_ANALYSIS' ? 'TECHNICAL_NERD' :
-                data.parse_result?.intent?.type === 'COMPANY_INFO' ? 'Morefit' : 'ALL';
-  steps.push({
-    id: `step-${stepId++}`,
-    type: 'tool_decision',
-    title: '路由决策',
-    content: `路由到: ${route === 'ALL' ? '多Agent投票模式' : route + ' Agent'}`,
-    status: 'completed'
-  });
+  // 3. 路由决策（优先用后端 route_info，缺失时回退旧的前端推断）
+  const intentType = data.parse_result?.intent?.type;
+  const routeInfo = data.route_info;
+  if (routeInfo) {
+    const isChat = routeInfo.mode === 'chat';
+    const isSector = routeInfo.mode === 'sector';
+    const agentsText = routeInfo.agents.length ? routeInfo.agents.join('、') : '';
+    const modeText = isChat ? '直接回复（闲聊）'
+      : isSector ? '板块/市场问答（未指定个股）'
+      : routeInfo.mode === 'multi' ? `多 Agent 投票（${routeInfo.agents.length} 个：${agentsText}）`
+      : routeInfo.mode === 'single' ? `${agentsText} Agent`
+      : '澄清确认';
+    steps.push({
+      id: `step-${stepId++}`,
+      type: 'tool_decision',
+      title: '路由决策',
+      content: isChat
+        ? `闲聊/通用问题 → 直接回复｜${routeInfo.reason}`
+        : isSector
+          ? `板块/市场问题 → 直接回答｜${routeInfo.reason}`
+          : `路由到: ${modeText}｜依据[${routeInfo.source}]: ${routeInfo.reason}`,
+      details: JSON.stringify(routeInfo, null, 2),
+      status: 'completed'
+    });
+  } else if (intentType === 'CHAT') {
+    // 兼容旧后端：闲聊/通用问题走后端 chat_node 直接回复，不进分析流程
+    steps.push({
+      id: `step-${stepId++}`,
+      type: 'tool_decision',
+      title: '路由决策',
+      content: '闲聊/通用问题 → 直接回复',
+      status: 'completed'
+    });
+  } else {
+    const route = intentType === 'TECHNICAL_ANALYSIS' ? 'TECHNICAL_NERD' :
+                  intentType === 'COMPANY_INFO' ? 'Morefit' : 'ALL';
+    steps.push({
+      id: `step-${stepId++}`,
+      type: 'tool_decision',
+      title: '路由决策',
+      content: `路由到: ${route === 'ALL' ? '多Agent投票模式' : route + ' Agent'}`,
+      status: 'completed'
+    });
+  }
   
   // 4. 工具调用 - 优先处理 all_tool_chains（双Agent模式）
   if (data.all_tool_chains && data.all_tool_chains.length > 0) {
@@ -359,28 +456,13 @@ const sendMessage = async () => {
   showCorrection.value = false;
   correctionText.value = '';
   
-  // 重置思维链
+  // 重置思维链 + 进度
   thinkingSteps.value = [];
   showThinkingChain.value = false;
+  chatProgress.value = { stage: 'start', agents: [], startedAt: Date.now() };
 
-  try {
-    const res = await fetch(`${API_BASE}/api/v1/chat`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_input: input,
-        thread_id: threadId.value,
-        user_id: userId.value,
-      })
-    });
-
-    const data: ChatResponse = await res.json();
+  const handleChatResponse = (data: ChatResponse) => {
     threadId.value = data.thread_id;
-
-    // 调试日志
-    console.log('[API Response] 完整响应:', data);
-    console.log('[API Response] all_tool_chains:', data.all_tool_chains);
-    console.log('[API Response] tool_chain:', data.tool_chain);
 
     if (data.success) {
       const parsed = parseResponse(data);
@@ -389,9 +471,6 @@ const sendMessage = async () => {
       // 生成思维链步骤
       thinkingSteps.value = generateThinkingSteps(data);
       showThinkingChain.value = thinkingSteps.value.length > 0;
-      
-      console.log('[ThinkingChain] 生成的步骤数:', thinkingSteps.value.length);
-      console.log('[ThinkingChain] 步骤详情:', thinkingSteps.value.map(s => ({ type: s.type, title: s.title })));
       
       messages.value.push({
         role: 'assistant',
@@ -413,14 +492,101 @@ const sendMessage = async () => {
         timestamp: new Date()
       });
     }
+  };
+
+  const pushError = (text: string) => {
+    messages.value.push({ role: 'assistant', content: text, timestamp: new Date() });
+  };
+
+  // 优先走 SSE 流式接口：实时展示分析进度
+  const tryStream = async (): Promise<boolean> => {
+    let res: Response;
+    try {
+      res = await fetch(`${API_BASE}/api/v1/chat-stream`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_input: input,
+          thread_id: threadId.value,
+          user_id: userId.value,
+        })
+      });
+    } catch {
+      return false; // 网络层失败 → 回退旧接口
+    }
+    if (!res.ok || !res.body) return false;
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    // 解析 SSE：事件块以空行分隔，块内 event:/data: 两行
+    const handleBlock = (block: string): boolean => {
+      const lines = block.split('\n');
+      let event = '';
+      let data = '';
+      for (const line of lines) {
+        if (line.startsWith('event:')) event = line.slice(6).trim();
+        else if (line.startsWith('data:')) data += line.slice(5).trim();
+      }
+      if (!event || !data) return true; // 继续读
+      try {
+        const payload = JSON.parse(data);
+        if (event === 'progress') {
+          applyProgressEvent(payload);
+        } else if (event === 'result') {
+          handleChatResponse(payload as ChatResponse);
+          return false; // 结束
+        } else if (event === 'error') {
+          pushError('请求失败: ' + (payload.error || '未知错误'));
+          return false;
+        }
+      } catch {
+        // 忽略无法解析的块
+      }
+      return true;
+    };
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        // SSE 标准行尾是 \r\n（sse_starlette），先归一化再按空行分块
+        const text = buffer.replace(/\r\n/g, '\n');
+        const blocks = text.split('\n\n');
+        buffer = blocks.pop() || '';
+        for (const block of blocks) {
+          if (!handleBlock(block)) return true;
+        }
+      }
+      if (buffer.trim()) handleBlock(buffer.replace(/\r\n/g, '\n'));
+    } finally {
+      reader.releaseLock();
+    }
+    return true;
+  };
+
+  try {
+    const streamed = await tryStream();
+    if (!streamed) {
+      // 回退：旧版非流式接口
+      const res = await fetch(`${API_BASE}/api/v1/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_input: input,
+          thread_id: threadId.value,
+          user_id: userId.value,
+        })
+      });
+      handleChatResponse(await res.json());
+    }
   } catch (err: any) {
-    messages.value.push({
-      role: 'assistant',
-      content: '网络错误: ' + err.message,
-      timestamp: new Date()
-    });
+    pushError(friendlyError(err));
   } finally {
     loading.value = false;
+    chatProgress.value = null;
   }
 };
 
@@ -461,6 +627,10 @@ const submitFeedback = async (feedbackType: 'agree' | 'disagree' | 'correction')
       feedback: feedbackType,
       user_id: userId.value,
     };
+    if (feedbackAgents.value.length > 0) {
+      payload.agent_names = selectedAgents.value.length ? [...selectedAgents.value] : undefined;
+      delete payload.agent_name;
+    }
     if (feedbackType === 'correction') {
       payload.rule_text = correctionText.value.trim();
     }
@@ -474,11 +644,12 @@ const submitFeedback = async (feedbackType: 'agree' | 'disagree' | 'correction')
 
     if (data.success) {
       feedbackMessage.value =
-        feedbackType === 'agree'
-          ? '已记录赞同反馈，Agent 权重已提升。'
+        data.message ||
+        (feedbackType === 'agree'
+          ? '已记录赞同反馈。'
           : feedbackType === 'disagree'
-          ? '已记录不同意反馈，Agent 权重已降低。'
-          : '已记录纠正反馈，并保存用户规则。';
+          ? '已记录不同意反馈。'
+          : '已记录纠正反馈，并保存用户规则。');
       if (feedbackType === 'correction') {
         showCorrection.value = false;
       }
@@ -486,11 +657,33 @@ const submitFeedback = async (feedbackType: 'agree' | 'disagree' | 'correction')
       feedbackMessage.value = `反馈失败：${data.error || '未知错误'}`;
     }
   } catch (error: any) {
-    feedbackError.value = error?.message || '网络请求失败';
+    feedbackError.value = friendlyError(error, '网络请求失败');
   } finally {
     feedbackLoading.value = false;
   }
 };
+
+const VOTE_CN: Record<string, string> = {
+  STRONG_BUY: '强烈买入', BUY: '买入', HOLD: '持有', REDUCE: '减仓', SELL: '卖出', STRONG_SELL: '强烈卖出',
+};
+function votesLine(review: any): string {
+  const votes = review.agent_votes || {};
+  const names = Object.keys(votes);
+  if (!names.length) return '';
+  const dissent = review.dissenting_agents || [];
+  const list = names.map((n) => `${n} ${VOTE_CN[votes[n]] || votes[n]}`).join('，');
+  return `投票：${list}\n` + (dissent.length ? `与最终决策方向不同：${dissent.join('、')}\n` : '');
+}
+function outcomesLine(review: any): string {
+  const rows = review.outcomes || [];
+  if (!rows.length) return '结果验证：尚未到验证时间（需要分析后若干个交易日）\n';
+  const lines = rows.map((r: any) => {
+    const verdict = r.correct === 1 ? '判断正确' : r.correct === 0 ? '判断偏离' : '无法判定';
+    const excess = r.excess_return != null ? `，超额收益 ${(r.excess_return * 100).toFixed(1)}%` : '';
+    return `${r.horizon_days} 日 · ${r.agent}（${VOTE_CN[r.vote] || r.vote}）：${verdict}${excess}`;
+  });
+  return `结果验证：\n${lines.join('\n')}\n`;
+}
 
 const submitReview = async () => {
   const msg = lastAssistantMessage.value;
@@ -530,12 +723,14 @@ const submitReview = async () => {
         `${review.reasoning_summary ? `理由：${review.reasoning_summary}\n` : ''}` +
         `${review.user_feedback ? `用户反馈：${review.user_feedback}\n` : ''}` +
         `${review.inconsistency_warning ? `警告：${review.inconsistency_warning}\n` : ''}` +
+        `${votesLine(review)}` +
+        `${outcomesLine(review)}` +
         `历史回顾：\n${historyLines}`;
     } else {
       reviewSummary.value = `复盘失败：${data.error || '未知错误'}`;
     }
   } catch (error: any) {
-    reviewSummary.value = `网络错误：${error?.message || '请求失败'}`;
+    reviewSummary.value = friendlyError(error, '请求失败');
   } finally {
     reviewLoading.value = false;
   }
@@ -548,15 +743,7 @@ const quickInput = (text: string) => {
 
 <template>
   <div class="app">
-    <!-- Background effects -->
-    <div class="background">
-      <div class="orb orb-1" />
-      <div class="orb orb-2" />
-      <div class="orb orb-3" />
-      <div class="grid-pattern" />
-    </div>
-
-    <!-- Sidebar -->
+<!-- Sidebar -->
     <Sidebar 
       @new-chat="clearChat" 
       @quick-input="quickInput"
@@ -593,7 +780,7 @@ const quickInput = (text: string) => {
                      class="thinking-panel">
                   <div class="thinking-panel-header" @click="showThinkingChain = !showThinkingChain">
                     <div class="thinking-toggle">
-                      <span class="toggle-icon">🧠</span>
+                      <span class="toggle-icon"></span>
                       <span class="toggle-text">Agent 思维链</span>
                       <span class="step-count">{{ thinkingSteps.length }} 步</span>
                     </div>
@@ -622,27 +809,34 @@ const quickInput = (text: string) => {
               </template>
             </template>
             
-            <LoadingBubble v-if="loading" />
+            <LoadingBubble v-if="loading" :progress="chatProgress" />
             <div ref="messagesEndRef" />
           </div>
 
           <div v-if="feedbackEligible" class="feedback-panel">
             <div class="feedback-panel-header">
-              <span>📌 对本次分析进行反馈 / 复盘</span>
+              <span>对本次分析进行反馈 / 复盘</span>
               <span class="feedback-user">用户ID: {{ userId }}</span>
+            </div>
+            <div v-if="feedbackAgents.length" class="feedback-agents">
+              <span class="feedback-agents-hint">勾选需要反馈的 Agent（不勾选则只记录历史，不改权重）：</span>
+              <label v-for="a in feedbackAgents" :key="a" class="feedback-agent-option">
+                <input type="checkbox" :value="a" v-model="selectedAgents" />
+                {{ a }}
+              </label>
             </div>
             <div class="feedback-actions">
               <button @click="submitFeedback('agree')" :disabled="feedbackLoading || reviewLoading">
-                👍 同意
+                同意
               </button>
               <button @click="submitFeedback('disagree')" :disabled="feedbackLoading || reviewLoading">
-                👎 不同意
+                不同意
               </button>
               <button @click="showCorrection = !showCorrection" :disabled="feedbackLoading || reviewLoading">
-                ✍️ 纠正规则
+                纠正规则
               </button>
               <button @click="submitReview" :disabled="reviewLoading || feedbackLoading">
-                🔍 复盘历史
+                复盘历史
               </button>
             </div>
             <div v-if="showCorrection" class="feedback-correction">
@@ -689,6 +883,15 @@ const quickInput = (text: string) => {
         </div>
       </template>
 
+      <!-- 评测中心视图 -->
+      <template v-else-if="currentView === 'eval'">
+        <EvalPanel />
+      </template>
+
+      <template v-else-if="currentView === 'rules'">
+        <RulesPanel :user-id="userId" />
+      </template>
+
       <!-- 回测视图 -->
       <template v-else>
         <div class="backtest-view">
@@ -712,15 +915,15 @@ html {
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background: #f8fafc;
-  color: #1e293b;
+  background: #121214;
+  color: #e4e4e7;
   overflow: hidden;
 }
 
 .app {
   height: 100vh;
   width: 100vw;
-  background: #f8fafc;
+  background: #121214;
   display: flex;
   overflow: hidden;
   position: relative;
@@ -770,8 +973,8 @@ body {
   inset: 0;
   opacity: 0.03;
   background-image: 
-    linear-gradient(rgba(0,0,0,0.1) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,0,0,0.1) 1px, transparent 1px);
+    linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px);
   background-size: 50px 50px;
 }
 
@@ -798,19 +1001,19 @@ body {
 }
 
 .messages::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.1);
+  background: rgba(255,255,255,0.1);
   border-radius: 3px;
 }
 
 .messages::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(255,255,255,0.2);
 }
 
 /* 思维链面板 */
 .thinking-panel {
   margin: 0.75rem 0;
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(11,11,12,0.92);
+  border: 1px solid rgba(255,255,255,0.06);
   border-radius: 1rem;
   overflow: hidden;
 }
@@ -825,7 +1028,7 @@ body {
 }
 
 .thinking-panel-header:hover {
-  background: rgba(0, 0, 0, 0.02);
+  background: rgba(255,255,255,0.02);
 }
 
 .thinking-toggle {
@@ -841,14 +1044,14 @@ body {
 .toggle-text {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.8);
+  color: rgba(255,255,255,0.8);
 }
 
 .step-count {
   font-size: 0.6875rem;
   padding: 0.125rem 0.5rem;
-  background: rgba(139, 92, 246, 0.2);
-  color: #a78bfa;
+  background: rgba(245,165,36,0.2);
+  color: #f5a524;
   border-radius: 9999px;
   font-weight: 600;
 }
@@ -861,13 +1064,13 @@ body {
 
 .hint-text {
   font-size: 0.75rem;
-  color: rgba(0, 0, 0, 0.4);
+  color: rgba(255,255,255,0.4);
 }
 
 .arrow-icon {
   width: 1rem;
   height: 1rem;
-  color: rgba(0, 0, 0, 0.4);
+  color: rgba(255,255,255,0.4);
   transition: transform 0.3s ease;
 }
 
@@ -901,7 +1104,7 @@ body {
 .feedback-panel {
   margin: 1rem auto 0;
   max-width: 56rem;
-  background: #ffffff;
+  background: #0b0b0c;
   border: 1px solid rgba(148, 163, 184, 0.18);
   border-radius: 1rem;
   padding: 1rem;
@@ -914,7 +1117,7 @@ body {
   align-items: center;
   gap: 1rem;
   margin-bottom: 0.75rem;
-  color: #334155;
+  color: #d4d4d8;
   font-weight: 600;
 }
 
@@ -926,11 +1129,12 @@ body {
 }
 
 .feedback-actions button {
-  border: none;
-  padding: 0.8rem 1rem;
-  border-radius: 9999px;
-  background: #0ea5e9;
-  color: white;
+  border: 1px solid #2a2a30;
+  padding: 0.6rem 1.1rem;
+  border-radius: 6px;
+  background: #121214;
+  color: #d4d4d8;
+  font-size: 0.85rem;
   cursor: pointer;
   transition: transform 0.15s ease, opacity 0.15s ease;
 }
@@ -941,8 +1145,16 @@ body {
 }
 
 .feedback-actions button:hover:not(:disabled) {
-  transform: translateY(-1px);
+  border-color: #f5a524;
+  color: #f5a524;
 }
+
+.feedback-agents {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px;
+  margin: 6px 0 10px; font-size: 13px; color: #8b8f98;
+}
+.feedback-agent-option { display: inline-flex; align-items: center; gap: 4px; color: #e4e4e7; cursor: pointer; }
+.feedback-agents-hint { flex-basis: 100%; }
 
 .feedback-correction {
   margin-bottom: 0.75rem;
@@ -976,18 +1188,18 @@ body {
 
 .feedback-message,
 .review-summary {
-  color: #0f172a;
+  color: #f4f4f5;
   font-size: 0.95rem;
   white-space: pre-wrap;
 }
 
 .feedback-error {
-  color: #b91c1c;
+  color: #ff6b6b;
   font-size: 0.95rem;
 }
 
 .feedback-user {
-  color: #64748b;
+  color: #8b8f98;
   font-size: 0.85rem;
 }
 
@@ -1006,7 +1218,7 @@ body {
 }
 
 .backtest-view::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.1);
+  background: rgba(255,255,255,0.1);
   border-radius: 3px;
 }
 
@@ -1014,6 +1226,6 @@ body {
   flex: 1;
   overflow-y: auto;
   padding: 2rem;
-  background: #f8fafc;
+  background: #121214;
 }
 </style>

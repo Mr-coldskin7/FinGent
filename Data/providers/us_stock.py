@@ -54,6 +54,13 @@ def input2Symbol(name: str = "Apple Inc.") -> Optional[str]:
     df["ticker"] = df["ticker"].astype(str).str.strip().str.upper()
     df["name"] = df["name"].astype(str).str.strip()
 
+    # 显式别名优先（如 海力士 / 000660 → SKHY）
+    from Data.symbol_alias import alias_symbol
+
+    aliased = alias_symbol(str(name))
+    if aliased:
+        return aliased
+
     input_upper = str(name).strip().upper()
     row_by_ticker = df[df["ticker"] == input_upper]
     if not row_by_ticker.empty:
@@ -63,6 +70,12 @@ def input2Symbol(name: str = "Apple Inc.") -> Optional[str]:
     row_by_name = df[df["name"].str.lower() == input_name.lower()]
     if not row_by_name.empty:
         return str(row_by_name["ticker"].values[0])
+
+    # 映射表是 4 月的快照，新上市美股（如 SKHY、SpaceX IPO 后）不在表内。
+    # 若输入本身就是标准美股代码形态（字母开头，含字母/数字/./-，1-6 位），直接放行。
+    # 纯数字（A 股 6 位代码 / KOSPI 码）不在此列，不会误判。
+    if re.fullmatch(r"[A-Z][A-Z0-9.\-]{0,5}", input_upper):
+        return input_upper
 
     return None
 

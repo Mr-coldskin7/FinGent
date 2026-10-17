@@ -1,8 +1,13 @@
 <script setup lang="ts">
+import { friendlyError } from '../utils/errors';
 import { ref, reactive, onMounted } from 'vue';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
+// ── Tab 切换 ──────────────────────────────────────────────
+const activeTab = ref<'model' | 'agents'>('model');
+
+// ── 模型设置 ──────────────────────────────────────────────
 interface ModelConfig {
   api_key: string;
   base_url: string;
@@ -62,8 +67,9 @@ async function loadConfig() {
 }
 
 function onPresetChange() {
-  if (selectedPreset.value && presets.value[selectedPreset.value]) {
+  if (selectedPreset.value) {
     const p = presets.value[selectedPreset.value];
+    if (!p) return;
     config.base_url = p.base_url;
     config.model_name = p.model_name;
   }
@@ -88,7 +94,7 @@ async function testConnection() {
     });
     testResult.value = await res.json();
   } catch (e: any) {
-    testResult.value = { success: false, message: `请求失败: ${e.message}` };
+    testResult.value = { success: false, message: `请求失败: ${friendlyError(e)}` };
   } finally {
     testing.value = false;
   }
@@ -116,7 +122,7 @@ async function saveConfig() {
       config.api_key = '';
     }
   } catch (e: any) {
-    saveResult.value = { success: false, message: `保存失败: ${e.message}` };
+    saveResult.value = { success: false, message: `保存失败: ${friendlyError(e)}` };
   } finally {
     saving.value = false;
   }
@@ -134,21 +140,144 @@ async function resetConfig() {
       saveResult.value = { success: true, message: '已恢复默认配置' };
     }
   } catch (e: any) {
-    saveResult.value = { success: false, message: `重置失败: ${e.message}` };
+    saveResult.value = { success: false, message: `重置失败: ${friendlyError(e)}` };
   }
 }
 
-onMounted(loadConfig);
+// ── Agent 角色管理 ────────────────────────────────────────
+interface AgentMeta {
+  name: string;
+  description: string;
+  allowed_tools: string[];
+  builtin: boolean;
+  editable: boolean;
+}
+
+const agents = ref<AgentMeta[]>([]);
+const selectedAgent = ref<string>('');
+const skillContent = ref<string>('');
+const skillOriginal = ref<string>('');
+const skillLoading = ref(false);
+const skillSaving = ref(false);
+const skillMessage = ref<{ success: boolean; message: string } | null>(null);
+const reloading = ref(false);
+
+const isDirty = () => skillContent.value !== skillOriginal.value;
+
+async function loadAgents() {
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/agents`);
+    const data = await res.json();
+    if (data.success) {
+      agents.value = data.agents || [];
+      const first = agents.value[0];
+      if (!selectedAgent.value && first) {
+        await selectAgent(first.name);
+      }
+    }
+  } catch (e: any) {
+    skillMessage.value = { success: false, message: `加载 agent 列表失败: ${friendlyError(e)}` };
+  }
+}
+
+async function selectAgent(name: string) {
+  if (isDirty() && !confirm('当前编辑未保存，切换会丢失修改。确定切换吗？')) {
+    return;
+  }
+  selectedAgent.value = name;
+  skillLoading.value = true;
+  skillMessage.value = null;
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/agents/${name}`);
+    const data = await res.json();
+    if (data.success) {
+      skillContent.value = data.content || '';
+      skillOriginal.value = data.content || '';
+    } else {
+      skillMessage.value = { success: false, message: data.error || '读取失败' };
+    }
+  } catch (e: any) {
+    skillMessage.value = { success: false, message: `读取失败: ${friendlyError(e)}` };
+  } finally {
+    skillLoading.value = false;
+  }
+}
+
+async function saveSkill() {
+  if (!selectedAgent.value) return;
+  skillSaving.value = true;
+  skillMessage.value = null;
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/agents/${selectedAgent.value}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: skillContent.value }),
+    });
+    const data = await res.json();
+    skillMessage.value = {
+      success: !!data.success,
+      message: data.message || data.error || (data.success ? '已保存' : '保存失败'),
+    };
+    if (data.success) {
+      skillOriginal.value = skillContent.value;
+      await loadAgents(); // 刷新描述等元数据
+    }
+  } catch (e: any) {
+    skillMessage.value = { success: false, message: `保存失败: ${friendlyError(e)}` };
+  } finally {
+    skillSaving.value = false;
+  }
+}
+
+async function reloadAgents() {
+  reloading.value = true;
+  skillMessage.value = null;
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/agents/reload`, { method: 'POST' });
+    const data = await res.json();
+    skillMessage.value = {
+      success: !!data.success,
+      message: data.message || data.error || '',
+    };
+    if (data.success) await loadAgents();
+  } catch (e: any) {
+    skillMessage.value = { success: false, message: `重载失败: ${friendlyError(e)}` };
+  } finally {
+    reloading.value = false;
+  }
+}
+
+onMounted(() => {
+  loadConfig();
+  loadAgents();
+});
 </script>
 
 <template>
   <div class="settings-panel">
     <div class="settings-header">
-      <h2>⚙️ 模型设置</h2>
-      <p class="subtitle">配置 LLM 模型提供商和 API Key</p>
+      <h2>系统设置</h2>
+      <p class="subtitle">配置 LLM 模型，或管理各 Agent 的角色人设（SKILL.md）</p>
     </div>
 
-    <div class="settings-body">
+    <!-- Tab 切换 -->
+    <div class="tabs">
+      <button
+        :class="['tab', { active: activeTab === 'model' }]"
+        @click="activeTab = 'model'"
+      >
+        模型设置
+      </button>
+      <button
+        :class="['tab', { active: activeTab === 'agents' }]"
+        @click="activeTab = 'agents'"
+      >
+        Agent 角色管理
+      </button>
+    </div>
+
+    <!-- ═══════════ Tab 1: 模型设置 ═══════════ -->
+    <div v-show="activeTab === 'model'" class="settings-body">
       <!-- 预设提供商 -->
       <div class="form-group">
         <label>预设提供商</label>
@@ -194,7 +323,7 @@ onMounted(loadConfig);
             placeholder="输入新的 API Key（留空则不更新）"
           />
           <button class="toggle-vis" @click="showApiKey = !showApiKey" type="button">
-            {{ showApiKey ? '🙈' : '👁️' }}
+            {{ showApiKey ? '隐藏' : '显示' }}
           </button>
         </div>
       </div>
@@ -223,24 +352,81 @@ onMounted(loadConfig);
           @click="testConnection"
           :disabled="testing || !config.api_key"
         >
-          {{ testing ? '测试中...' : '🔗 测试连接' }}
+          {{ testing ? '测试中...' : '测试连接' }}
         </button>
         <button class="btn btn-save" @click="saveConfig" :disabled="saving">
-          {{ saving ? '保存中...' : '💾 保存配置' }}
+          {{ saving ? '保存中...' : '保存配置' }}
         </button>
         <button class="btn btn-reset" @click="resetConfig">
-          🔄 恢复默认
+          恢复默认
         </button>
       </div>
 
       <!-- 测试结果 -->
       <div v-if="testResult" :class="['result', testResult.success ? 'success' : 'error']">
-        {{ testResult.success ? '✅' : '❌' }} {{ testResult.message }}
+        {{ testResult.success ? '✓' : '✕' }} {{ testResult.message }}
       </div>
 
       <!-- 保存结果 -->
       <div v-if="saveResult" :class="['result', saveResult.success ? 'success' : 'error']">
-        {{ saveResult.success ? '✅' : '❌' }} {{ saveResult.message }}
+        {{ saveResult.success ? '✓' : '✕' }} {{ saveResult.message }}
+      </div>
+    </div>
+
+    <!-- ═══════════ Tab 2: Agent 角色管理 ═══════════ -->
+    <div v-show="activeTab === 'agents'" class="settings-body">
+      <div class="agent-toolbar">
+        <select
+          v-model="selectedAgent"
+          @change="selectAgent(selectedAgent)"
+          class="form-select agent-select"
+        >
+          <option v-for="a in agents" :key="a.name" :value="a.name">
+            {{ a.builtin ? '内置' : '自定义' }} {{ a.name }}
+          </option>
+        </select>
+        <button class="btn btn-reset" @click="reloadAgents" :disabled="reloading">
+          {{ reloading ? '重载中...' : '重载技能目录' }}
+        </button>
+        <button
+          class="btn btn-save"
+          @click="saveSkill"
+          :disabled="skillSaving || skillLoading || !isDirty() || !selectedAgent"
+        >
+          {{ skillSaving ? '保存中...' : '保存并生效' }}
+        </button>
+      </div>
+
+      <div v-if="selectedAgent" class="agent-meta">
+        <div class="meta-line">
+          <span class="meta-label">描述</span>
+          {{ agents.find(a => a.name === selectedAgent)?.description }}
+        </div>
+        <div class="meta-line">
+          <span class="meta-label">工具</span>
+          <code class="tool-chip">{{ (agents.find(a => a.name === selectedAgent)?.allowed_tools || []).join(' ') || '（全部工具）' }}</code>
+        </div>
+        <div class="meta-line hint">
+          身份、分析协议与输出 JSON 格式都在下方 SKILL.md 中；保存后自动备份原文件并热重建，新对话立即生效。
+        </div>
+      </div>
+
+      <div class="editor-wrap">
+        <textarea
+          v-model="skillContent"
+          class="skill-editor"
+          spellcheck="false"
+          :disabled="skillLoading"
+          placeholder="加载 SKILL.md ..."
+        ></textarea>
+        <div class="editor-statusbar">
+          <span>{{ skillLoading ? '加载中...' : `${skillContent.length} 字符` }}</span>
+          <span v-if="isDirty()" class="dirty-dot">● 未保存</span>
+        </div>
+      </div>
+
+      <div v-if="skillMessage" :class="['result', skillMessage.success ? 'success' : 'error']">
+        {{ skillMessage.success ? '✓' : '✕' }} {{ skillMessage.message }}
       </div>
     </div>
   </div>
@@ -254,20 +440,50 @@ onMounted(loadConfig);
 }
 
 .settings-header {
-  margin-bottom: 2rem;
+  margin-bottom: 1.25rem;
 }
 
 .settings-header h2 {
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0 0 0.5rem 0;
-  color: #1e293b;
+  color: #e4e4e7;
 }
 
 .subtitle {
-  color: #64748b;
+  color: #8b8f98;
   font-size: 0.875rem;
   margin: 0;
+}
+
+/* ── Tabs ── */
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid #27272a;
+}
+
+.tab {
+  padding: 0.625rem 1.25rem;
+  border: none;
+  background: transparent;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #8b8f98;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: all 0.2s;
+}
+
+.tab:hover {
+  color: #d4d4d8;
+}
+
+.tab.active {
+  color: #f5a524;
+  border-bottom-color: #f5a524;
 }
 
 .settings-body {
@@ -285,28 +501,28 @@ onMounted(loadConfig);
 .form-group label {
   font-weight: 600;
   font-size: 0.875rem;
-  color: #334155;
+  color: #d4d4d8;
 }
 
 .form-input, .form-select {
   padding: 0.75rem 1rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #27272a;
   border-radius: 0.625rem;
   font-size: 0.9375rem;
-  background: white;
-  color: #1e293b;
+  background: #0b0b0c;
+  color: #e4e4e7;
   transition: border-color 0.2s;
 }
 
 .form-input:focus, .form-select:focus {
   outline: none;
-  border-color: #8b5cf6;
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.1);
+  border-color: #f5a524;
+  box-shadow: 0 0 0 3px rgba(245,165,36,0.1);
 }
 
 .hint {
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: #71717a;
 }
 
 .api-key-input {
@@ -320,23 +536,23 @@ onMounted(loadConfig);
 
 .toggle-vis {
   padding: 0 0.75rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #27272a;
   border-radius: 0.625rem;
-  background: #f8fafc;
+  background: #121214;
   cursor: pointer;
   font-size: 1.125rem;
 }
 
 .form-range {
   width: 100%;
-  accent-color: #8b5cf6;
+  accent-color: #f5a524;
 }
 
 .range-labels {
   display: flex;
   justify-content: space-between;
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: #71717a;
 }
 
 .actions {
@@ -361,13 +577,13 @@ onMounted(loadConfig);
 }
 
 .btn-test {
-  background: #f0fdf4;
-  color: #16a34a;
-  border: 1px solid #bbf7d0;
+  background: rgba(34,197,94,0.10);
+  color: #22c55e;
+  border: 1px solid rgba(34,197,94,0.35);
 }
 
 .btn-test:hover:not(:disabled) {
-  background: #dcfce7;
+  background: rgba(34,197,94,0.16);
 }
 
 .btn-save {
@@ -382,13 +598,13 @@ onMounted(loadConfig);
 }
 
 .btn-reset {
-  background: #f8fafc;
-  color: #64748b;
-  border: 1px solid #e2e8f0;
+  background: #121214;
+  color: #8b8f98;
+  border: 1px solid #27272a;
 }
 
 .btn-reset:hover {
-  background: #f1f5f9;
+  background: #18181b;
 }
 
 .result {
@@ -399,14 +615,105 @@ onMounted(loadConfig);
 }
 
 .result.success {
-  background: #f0fdf4;
-  color: #16a34a;
-  border: 1px solid #bbf7d0;
+  background: rgba(34,197,94,0.10);
+  color: #22c55e;
+  border: 1px solid rgba(34,197,94,0.35);
 }
 
 .result.error {
-  background: #fef2f2;
-  color: #dc2626;
-  border: 1px solid #fecaca;
+  background: rgba(239,68,68,0.10);
+  color: #ff4d4f;
+  border: 1px solid rgba(239,68,68,0.35);
+}
+
+/* ── Agent 管理 ── */
+.agent-toolbar {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.agent-toolbar .btn {
+  padding: 0.625rem 1rem;
+  font-size: 0.8125rem;
+}
+
+.agent-select {
+  flex: 1;
+  min-width: 200px;
+}
+
+.agent-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.875rem 1rem;
+  background: #121214;
+  border: 1px solid #27272a;
+  border-radius: 0.625rem;
+  font-size: 0.8125rem;
+  color: #b4b4bb;
+}
+
+.meta-line {
+  line-height: 1.5;
+}
+
+.meta-label {
+  display: inline-block;
+  min-width: 2.5rem;
+  font-weight: 600;
+  color: #d4d4d8;
+}
+
+.tool-chip {
+  font-size: 0.75rem;
+  background: #121214;
+  color: #4f46e5;
+  padding: 0.125rem 0.5rem;
+  border-radius: 0.375rem;
+  word-break: break-all;
+}
+
+.editor-wrap {
+  border: 1px solid #27272a;
+  border-radius: 0.625rem;
+  overflow: hidden;
+  background: #0b0b0c;
+}
+
+.skill-editor {
+  width: 100%;
+  min-height: 380px;
+  max-height: 55vh;
+  padding: 1rem;
+  border: none;
+  resize: vertical;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: #e4e4e7;
+  background: #0b0b0c;
+  box-sizing: border-box;
+}
+
+.skill-editor:focus {
+  outline: none;
+}
+
+.editor-statusbar {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.375rem 1rem;
+  font-size: 0.75rem;
+  color: #71717a;
+  background: #121214;
+  border-top: 1px solid #27272a;
+}
+
+.dirty-dot {
+  color: #fbbf24;
+  font-weight: 600;
 }
 </style>

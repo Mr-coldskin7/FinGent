@@ -2,7 +2,8 @@ import asyncio
 from typing import Union
 
 import pandas as pd
-import akshare as ak
+import akshare as ak  # 仅用于类型/常量，实际调用经 ak_call 隔离
+from Data.providers.ak_isolated import ak_call
 from datetime import date, datetime, timedelta
 
 # ========================================================================================================================
@@ -95,7 +96,7 @@ async def get_see_summary():
     """
     获取上交所概况数据
     """
-    stock_sse_summary_df = await asyncio.to_thread(ak.stock_sse_summary)
+    stock_sse_summary_df = await ak_call("stock_sse_summary")
     print(stock_sse_summary_df)
     return stock_sse_summary_df
 
@@ -104,7 +105,7 @@ async def get_sz_stock_info():
     """
     获取深交所概况数据
     """
-    stock_szse_summary_df = await asyncio.to_thread(ak.stock_szse_summary)
+    stock_szse_summary_df = await ak_call("stock_szse_summary")
     print(stock_szse_summary_df)
     return stock_szse_summary_df
 
@@ -113,7 +114,7 @@ async def stock_info_sh_name_code(data: str):
     """
     param symbol: choice of {"主板A股", "主板B股", "科创板"}
     """
-    stock_info_df = await asyncio.to_thread(ak.stock_info_sh_name_code, symbol=data)
+    stock_info_df = await ak_call("stock_info_sh_name_code", symbol=data)
     print(stock_info_df)
     return stock_info_df
 
@@ -127,8 +128,7 @@ async def stock_individual_info(symbol: str):
     if not symbol.isdigit():
         symbol = input2number(symbol)  # 用 input2number 而不是 input2code
     try:
-        stock_individual_info_df = await asyncio.to_thread(
-            ak.stock_individual_info_em, symbol=symbol
+        stock_individual_info_df = await ak_call("stock_individual_info_em", symbol=symbol
         )
         return stock_individual_info_df
     except Exception:
@@ -151,8 +151,7 @@ async def stock_individual_price_info_recent(symbol: str):
     :return: 个股近期信息 DataFrame
     """
     symbol = input2number(symbol)
-    stock_individual_price_info_recent_df = await asyncio.to_thread(
-        ak.stock_bid_ask_em, symbol=symbol
+    stock_individual_price_info_recent_df = await ak_call("stock_bid_ask_em", symbol=symbol
     )
     return stock_individual_price_info_recent_df
 
@@ -162,8 +161,7 @@ async def recent_stock_list():
     实时行情数据
     :return:DataFrame
     """
-    stock_zh_a_spot = await asyncio.to_thread(ak.stock_zh_a_spot)
-    print(stock_zh_a_spot)
+    stock_zh_a_spot = await ak_call("stock_zh_a_spot")
     return stock_zh_a_spot
 
 
@@ -172,8 +170,7 @@ async def get_financial_report(stock_num: str):
     获取财务报告数据
     :return:DataFrame
     """
-    stock_financial_report_sina_df = await asyncio.to_thread(
-        ak.stock_financial_abstract, symbol=stock_num
+    stock_financial_report_sina_df = await ak_call("stock_financial_abstract", symbol=stock_num
     )
     print(stock_financial_report_sina_df.head())
     return stock_financial_report_sina_df
@@ -204,16 +201,14 @@ async def get_historical_stock_price_by_symbol(
         raise ValueError("startDate must be before endDate")
     startDate = _to_yyyymmdd(startDate)
     endDate = _to_yyyymmdd(endDate)
-    return await asyncio.to_thread(
-        ak.stock_zh_a_daily, symbol=symbol, start_date=startDate, end_date=endDate
+    return await ak_call("stock_zh_a_daily", symbol=symbol, start_date=startDate, end_date=endDate
     )
 
 
 async def get_debt(symbol: str):
     """获取股票负债信息"""
     symbol = input2number(symbol)
-    stock_financial_debt_ths_df = await asyncio.to_thread(
-        ak.stock_financial_debt_ths, symbol=symbol, indicator="按年度"
+    stock_financial_debt_ths_df = await ak_call("stock_financial_debt_ths", symbol=symbol, indicator="按年度"
     )
     print(stock_financial_debt_ths_df)
 

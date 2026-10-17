@@ -47,7 +47,7 @@ FinGent 希望解决普通投资者常见的三个问题：
 | **记忆与自进化** | Redis 对话记忆 + SQLite 长期记忆；用户反馈动态调整 Agent 权重 |
 | **RAG 金融知识库** | 本地 ChromaDB + Qwen Embedding，支持金融术语与指标检索 |
 | **A 股 / 美股双市场** | 自动识别市场类型，akshare / yfinance / FMP / Tiingo 多源适配 |
-| **国产模型优先** | 默认通义千问，数据不出境，支持多模型切换 |
+| **国产模型优先** | 默认通义千问（OpenAI 兼容接口），`.env` 可切换任意兼容模型或中转（如 opencode zen），支持多模型切换 |
 
 ---
 
@@ -114,18 +114,21 @@ FinGent 采用六层架构，层间通过明确的数据契约交互：
 
 ## 快速开始
 
-### 1. 克隆与安装依赖
+### 1. 安装依赖（uv 环境）
 
 ```bash
-# 后端依赖（建议使用 Python 3.9+）
-pip install -r requirements.txt
+# 后端依赖（Python 3.12，由 uv 自动管理）
+uv sync
+
+# 可选依赖组：RAG 向量库（torch/chromadb）、回测（backtrader）、开发测试
+uv sync --group rag
+uv sync --group backtest
+uv sync --group dev
 
 # 前端依赖
 cd Frontend
 npm install
 ```
-
-> 若项目暂未提供 `requirements.txt`，可直接安装关键依赖：`fastapi`、`uvicorn`、`langgraph`、`langchain`、`akshare`、`yfinance`、`backtrader`、`redis`、`aiosqlite`、`chromadb`。
 
 ### 2. 配置环境变量
 
@@ -138,16 +141,19 @@ cp .env.example .env
 ### 3. 启动服务
 
 ```bash
-# 启动 Redis（如使用本地 Redis）
-redis-server
+# 启动后端 API（默认内存 checkpointer，无需 Redis）
+uv run uvicorn api_server:app --port 8000
 
-# 启动后端 API
-python api_server.py
+# 如需 Redis 持久化对话记忆（L1）：先启动 Redis，再设置环境变量
+redis-server
+FINGENT_CHECKPOINTER=redis uv run uvicorn api_server:app --port 8000
 
 # 启动前端（新终端）
 cd Frontend
 npm run dev
 ```
+
+`FINGENT_CHECKPOINTER` 取值：`memory`（默认，进程内存）/ `redis`（需要 Redis 运行中）。详见 [`Agent.md`](Agent.md)。
 
 默认后端地址：`http://localhost:8000`  
 默认前端地址：以 Vite 输出为准（通常为 `http://localhost:5173`）
@@ -155,13 +161,14 @@ npm run dev
 ### 4. 命令行模式
 
 ```bash
-python main.py
+uv run python main.py                          # 交互式模式
+uv run python main.py "分析AAPL值得买吗"      # 单次查询
 ```
 
-### 5. 构建 RAG 知识库（可选）
+### 5. 构建 RAG 知识库（可选，需先 uv sync --group rag）
 
 ```bash
-python RAG/build_db.py
+uv run python RAG/build_db.py
 ```
 
 ---
@@ -175,7 +182,9 @@ python RAG/build_db.py
 | `QIANWEN_API_KEY` | 是 | - | 阿里云百炼 API 密钥 |
 | `MODEL_BASE_URL` | 否 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | 大模型 API 地址 |
 | `MODEL_NAME` | 否 | `qwen-max` | 模型名称 |
-| `REDIS_URL` | 否 | `redis://localhost:6379/0` | Redis 连接串 |
+| `REDIS_URL` | 否 | `redis://localhost:6379/0` | Redis 连接串（L1 对话记忆 / L2 行情缓存） |
+| `FINGENT_CHECKPOINTER` | 否 | `memory` | 对话记忆后端：`memory`（进程内存）/ `redis` |
+| `CACHE_BACKEND` | 否 | `memory` | 行情缓存后端：`memory`（仅 L1 内存）/ `redis`（L2 Redis） |
 | `FINGENT_MEMORY_DB` | 否 | `./memory/l3_memory.db` | L3 记忆数据库路径 |
 | `FMP_API_KEY` | 否 | - | Financial Modeling Prep 密钥 |
 | `TIINGO_API_KEY` | 否 | - | Tiingo 密钥 |
@@ -197,8 +206,11 @@ FinGent/
 ├── backtest_cli.py            # 回测命令行工具
 │
 ├── Data/                      # 数据服务层
-│   ├── cache.py               # LRU 内存缓存
-│   ├── memory.py              # L3 记忆管理器
+│   ├── cache.py               # L1 内存缓存 + L2 Redis 缓存（CACHE_BACKEND 可选）
+│   ├── memory.py              # L3 记忆管理器（权重反馈 / 纠正规则 / 结果统计）
+│   ├── outcome.py             # 决策结果前向验证（超额收益判定 → 客观权重）
+│   ├── market_context.py      # 板块/市场问答用的实时背景行情
+│   ├── symbol_alias.py        # 显式股票别名表（如 海力士 → SKHY）
 │   ├── models.py              # 统一数据模型
 │   ├── service.py             # InfoService 统一入口
 │   ├── unified_models.py      # 跨市场通用模型
@@ -206,6 +218,8 @@ FinGent/
 │       ├── adapters.py
 │       ├── us_stock.py        # 美股数据源
 │       ├── zh_stock.py        # A 股数据源
+│       ├── yahoo_us.py        # Yahoo 直连行情（Tiingo 兜底源）
+│       ├── ak_isolated.py     # akshare 子进程隔离层（防原生层崩溃）
 │       └── web_search.py      # 网络搜索
 │
 ├── LLM/                       # Agent 与核心引擎层
@@ -229,6 +243,14 @@ FinGent/
 │   ├── visualizer.py
 │   └── backtest_cli.py
 │
+├── Eval/                      # 可靠性评测
+│   ├── reliability.py         # K 次运行成功率 / Wilson 区间 / 延迟 / 降级率
+│   ├── cases.json             # 评测用例
+│   └── runs/                  # 每次评测产物（report / trace / run_log，不入库）
+│
+├── scripts/
+│   └── run_backend.sh         # 后端守护脚本（崩溃自动拉起）
+│
 ├── Frontend/                  # 用户交互层（Vue3 + Vite + Tailwind）
 │   ├── package.json
 │   ├── vite.config.ts
@@ -236,11 +258,15 @@ FinGent/
 │       ├── App.vue
 │       ├── types/
 │       └── components/
-│           ├── MarketPanel.vue
-│           ├── BacktestPanel.vue
+│           ├── MarketPanel.vue     # 行情中心
+│           ├── BacktestPanel.vue   # 回测
 │           ├── MessageBubble.vue
-│           ├── DecisionCard.vue
-│           ├── ThinkingChain.vue
+│           ├── DecisionCard.vue    # 决策卡片
+│           ├── ThinkingChain.vue   # 思维链（含路由理由 / 板块问答标记）
+│           ├── LoadingBubble.vue   # SSE 进度 + 阶段秒表
+│           ├── EvalPanel.vue       # 评测中心（成功率 / 时间线 / 运行日志）
+│           ├── RulesPanel.vue      # 规则管理
+│           ├── SettingsPanel.vue   # 模型设置 + Agent 角色管理
 │           └── ToolChain.vue
 │
 ├── Test/                      # 单元测试
@@ -254,16 +280,20 @@ FinGent/
 | 方法 | 端点 | 说明 |
 |------|------|------|
 | POST | `/api/v1/chat` | 对话分析 |
-| POST | `/api/v1/feedback` | 用户反馈 |
-| GET  | `/api/v1/market` | 行情聚合 |
-| POST | `/api/v1/backtest` | 同步回测 |
+| POST | `/api/v1/chat-stream` | 对话分析（SSE 实时进度） |
+| POST | `/api/v1/feedback` | 用户反馈（多 Agent 反馈归因 → 权重） |
+| GET  | `/api/v1/market` | 行情聚合（stale-while-revalidate 缓存） |
+| POST | `/api/v1/backtest` | 同步回测（较慢，演示路径请用 stream 版） |
 | POST | `/api/v1/backtest-stream` | SSE 流式回测 |
 | POST | `/api/v1/backtest-cancel` | 取消回测 |
 | GET  | `/api/v1/backtest-chart` | 回测图表数据 |
-| POST | `/api/v1/review` | 历史决策复盘 |
+| POST | `/api/v1/review` | 历史决策复盘（投票拆解 / 结果验证 / 反转提醒） |
+| GET/PUT | `/api/v1/agents[/{name}]` | Agent 角色管理（描述可编辑，热重载） |
+| GET  | `/api/v1/eval/runs[/{id}[/trace|/log|/report-md]]` | 可靠性评测产物（只读） |
+| GET/PATCH/DELETE | `/api/v1/memory/rules[/{id}]` | 纠正规则管理 |
+| GET  | `/api/v1/memory/accuracy` | Agent 命中率 |
+| GET/POST | `/api/v1/model/config|test|reset` | 模型运行时配置 |
 | GET  | `/health` | 健康检查 |
-
-详细请求/响应示例见 [`FinGent_技术方案书_v1.md`](FinGent_技术方案书_v1.md)。
 
 ---
 
@@ -294,7 +324,18 @@ FinGent/
 
 ```bash
 # 运行测试
-pytest Test/
+uv run pytest Test -q
+
+# 可靠性评测（K 次运行成功率，消耗 LLM 配额，3 用例 × 5 次约 25–30 分钟）
+uv run python -m Eval.reliability --k 5          # 全部用例
+uv run python -m Eval.reliability --k 2 --only chat   # 冒烟
+
+# 决策结果前向验证（超额收益 → 客观权重更新）
+uv run python -m Data.outcome
+
+# 可选：结果验证定时调度（launchd，工作日 18:10 自动跑）
+cp scripts/com.fingent.outcome.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.fingent.outcome.plist
 
 # 前端类型检查与构建
 cd Frontend

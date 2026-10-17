@@ -66,7 +66,8 @@ class TestAnalysisCRUD:
         record = _run(memory_manager.get_analysis_record("s1", "aapl"))
         assert record is not None
         assert record.stock_symbol == "AAPL"  # uppercased
-        assert record.agent_votes["TECHNICAL_NERD"] == "BUY"
+        # 存储时统一为标准名（technical-nerd），见 Data/memory.py CANONICAL_AGENT_NAMES
+        assert record.agent_votes["technical-nerd"] == "BUY"
         assert record.final_decision == "BUY"
 
     def test_record_symbol_uppercased(self, memory_manager):
@@ -222,7 +223,7 @@ class TestUserRules:
         )
         # Get only Morefit rules
         rules = _run(memory_manager.get_rules("u1", agent_name="Morefit"))
-        assert all(r.agent_name == "Morefit" for r in rules)
+        assert all(r.agent_name == "morefit" for r in rules)  # 统一为标准名
 
     def test_get_rules_min_trigger_count(self, memory_manager):
         _run(

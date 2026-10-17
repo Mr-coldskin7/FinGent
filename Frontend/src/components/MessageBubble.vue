@@ -20,10 +20,10 @@ function isDualAgentMarkdown(content: string): boolean {
 
 // Agent 配置
 const AGENT_CONFIG: Record<string, { name: string; icon: string; class: string; color: string }> = {
-  'Morefit': { name: 'Morefit 基本面', icon: '📊', class: 'morefit', color: '#2563eb' },
-  'TECHNICAL_NERD': { name: 'Technical_Nerd 技术面', icon: '📈', class: 'technical', color: '#059669' },
-  'RiskManager': { name: 'RiskManager 风控', icon: '🛡️', class: 'riskmanager', color: '#d97706' },
-  'SentimentAnalyzer': { name: 'SentimentAnalyzer 舆情', icon: '💬', class: 'sentimentanalyzer', color: '#7c3aed' },
+  'Morefit': { name: 'Morefit 基本面', icon: '', class: 'morefit', color: '#60a5fa' },
+  'TECHNICAL_NERD': { name: 'Technical_Nerd 技术面', icon: '', class: 'technical', color: '#34d399' },
+  'RiskManager': { name: 'RiskManager 风控', icon: '', class: 'riskmanager', color: '#fbbf24' },
+  'SentimentAnalyzer': { name: 'SentimentAnalyzer 舆情', icon: '', class: 'sentimentanalyzer', color: '#f5a524' },
 };
 
 function getAgentClass(agentName: string): string {
@@ -31,7 +31,7 @@ function getAgentClass(agentName: string): string {
 }
 
 function getAgentIcon(agentName: string): string {
-  return AGENT_CONFIG[agentName]?.icon || '🤖';
+  return AGENT_CONFIG[agentName]?.icon || '';
 }
 
 function getAgentDisplayName(agentName: string): string {
@@ -59,12 +59,12 @@ function formatVote(vote: string): string {
         <p class="text">{{ message.content }}</p>
       </div>
     </div>
-    <div class="user-avatar">👤</div>
+    <div class="user-avatar">你</div>
   </div>
 
   <!-- AI Message -->
   <div v-else class="ai-message" :style="{ animationDelay: `${index * 0.05}s` }">
-    <div class="ai-avatar">🤖</div>
+    <div class="ai-avatar">FG</div>
     
     <div class="content">
       <!-- Debug: 显示工具链状态 -->
@@ -85,7 +85,7 @@ function formatVote(vote: string): string {
       <!-- Clarification Box -->
       <div v-if="message.isClarification" class="clarification-box">
         <div class="clarification-header">
-          <span class="icon">💬</span>
+          <span class="icon"></span>
           <span class="title">需要更多信息</span>
         </div>
         <p class="text">{{ message.content }}</p>
@@ -95,7 +95,7 @@ function formatVote(vote: string): string {
       <template v-if="message.data?.decisions?.length && message.allToolChains?.length">
         <!-- 分析标题 -->
         <div class="analysis-title-bar">
-          <span class="analysis-icon">🔬</span>
+          <span class="analysis-icon"></span>
           <span class="analysis-title">{{ message.data.decisions.length }}Agent 深度分析</span>
         </div>
 
@@ -135,7 +135,7 @@ function formatVote(vote: string): string {
         <!-- 最终投票结果 -->
         <div v-if="message.data.final_decision" class="final-vote-section">
           <div class="final-vote-header">
-            <span class="icon">🎯</span>
+            <span class="icon"></span>
             <span class="title">综合投票结果</span>
           </div>
           <div class="final-vote-card" :class="message.data.final_decision.vote">
@@ -163,7 +163,7 @@ function formatVote(vote: string): string {
       <!-- 单Agent模式：决策卡片 -->
       <div v-else-if="message.data?.decisions?.length" class="decisions-container">
         <div class="analysis-header">
-          <span class="analysis-icon">📊</span>
+          <span class="analysis-icon"></span>
           <span class="analysis-title">分析报告</span>
         </div>
         <DecisionCard 
@@ -211,14 +211,15 @@ function formatVote(vote: string): string {
 .user-avatar {
   width: 2.25rem;
   height: 2.25rem;
-  border-radius: 50%;
-  background: linear-gradient(to bottom right, #3b82f6, #06b6d4);
+  border-radius: 6px;
+  background: #18181b;
+  border: 1px solid #3f3f46;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 1rem;
-  box-shadow: 0 0 20px -5px rgba(59, 130, 246, 0.4);
+  font-size: 0.8rem;
+  color: #d4d4d8;
 }
 
 .user-bubble {
@@ -247,14 +248,18 @@ function formatVote(vote: string): string {
 .ai-avatar {
   width: 2.25rem;
   height: 2.25rem;
-  border-radius: 50%;
-  background: linear-gradient(to bottom right, #10b981, #14b8a6);
+  border-radius: 6px;
+  background: #121214;
+  border: 1px solid #f5a524;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 1rem;
-  box-shadow: 0 0 20px -5px rgba(16, 185, 129, 0.4);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #f5a524;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 .content {
@@ -266,9 +271,9 @@ function formatVote(vote: string): string {
 
 .debug-info {
   padding: 0.5rem;
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(255,255,255,0.04);
   border-radius: 0.5rem;
-  color: rgba(0, 0, 0, 0.5);
+  color: rgba(255,255,255,0.5);
   font-size: 0.75rem;
 }
 
@@ -278,8 +283,8 @@ function formatVote(vote: string): string {
   align-items: center;
   gap: 0.625rem;
   padding: 0.875rem 1rem;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1), rgba(124, 58, 237, 0.05));
-  border: 1px solid rgba(139, 92, 246, 0.2);
+  background: linear-gradient(135deg, rgba(245,165,36,0.1), rgba(245,165,36,0.05));
+  border: 1px solid rgba(245,165,36,0.2);
   border-radius: 0.875rem;
   margin-bottom: 0.5rem;
 }
@@ -291,14 +296,14 @@ function formatVote(vote: string): string {
 .analysis-title-bar .analysis-title {
   font-size: 1rem;
   font-weight: 700;
-  color: #7c3aed;
+  color: #f5a524;
 }
 
 /* 双Agent模式样式 */
 .agent-analysis-section {
   border-radius: 1rem;
   overflow: hidden;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
 .agent-analysis-section.morefit {
@@ -317,8 +322,8 @@ function formatVote(vote: string): string {
 }
 
 .agent-analysis-section.sentimentanalyzer {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.06), rgba(124, 58, 237, 0.03));
-  border-color: rgba(139, 92, 246, 0.15);
+  background: linear-gradient(135deg, rgba(245,165,36,0.06), rgba(245,165,36,0.03));
+  border-color: rgba(245,165,36,0.15);
 }
 
 .agent-analysis-section.default {
@@ -331,7 +336,7 @@ function formatVote(vote: string): string {
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.25rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
 .agent-badge {
@@ -350,23 +355,23 @@ function formatVote(vote: string): string {
 }
 
 .morefit .agent-name {
-  color: #2563eb;
+  color: #60a5fa;
 }
 
 .technical .agent-name {
-  color: #059669;
+  color: #34d399;
 }
 
 .riskmanager .agent-name {
-  color: #d97706;
+  color: #fbbf24;
 }
 
 .sentimentanalyzer .agent-name {
-  color: #7c3aed;
+  color: #f5a524;
 }
 
 .default .agent-name {
-  color: #6b7280;
+  color: #8b8f98;
 }
 
 .vote-tag {
@@ -379,22 +384,22 @@ function formatVote(vote: string): string {
 
 .vote-tag.STRONG_BUY {
   background: rgba(16, 185, 129, 0.12);
-  color: #059669;
+  color: #34d399;
 }
 
 .vote-tag.BUY {
   background: rgba(74, 222, 128, 0.12);
-  color: #16a34a;
+  color: #22c55e;
 }
 
 .vote-tag.HOLD {
   background: rgba(251, 191, 36, 0.15);
-  color: #d97706;
+  color: #fbbf24;
 }
 
 .vote-tag.SELL {
   background: rgba(248, 113, 113, 0.12);
-  color: #dc2626;
+  color: #ff4d4f;
 }
 
 .vote-tag.STRONG_SELL {
@@ -404,7 +409,7 @@ function formatVote(vote: string): string {
 
 .vote-tag.REDUCE {
   background: rgba(245, 158, 11, 0.12);
-  color: #d97706;
+  color: #fbbf24;
 }
 
 .agent-content {
@@ -416,7 +421,7 @@ function formatVote(vote: string): string {
   gap: 1.5rem;
   margin-bottom: 1rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
 }
 
 .metric {
@@ -427,7 +432,7 @@ function formatVote(vote: string): string {
 
 .metric-label {
   font-size: 0.6875rem;
-  color: rgba(0, 0, 0, 0.45);
+  color: rgba(255,255,255,0.45);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -435,17 +440,17 @@ function formatVote(vote: string): string {
 .metric-value {
   font-size: 1.125rem;
   font-weight: 700;
-  color: #1e293b;
+  color: #e4e4e7;
 }
 
 .reason-box {
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(255,255,255,0.04);
   border-radius: 0.75rem;
   padding: 1rem;
 }
 
 .reason-text {
-  color: rgba(0, 0, 0, 0.75);
+  color: rgba(255,255,255,0.75);
   font-size: 0.9375rem;
   line-height: 1.75;
   margin: 0;
@@ -455,7 +460,7 @@ function formatVote(vote: string): string {
 .final-vote-section {
   margin-top: 0.5rem;
   padding-top: 1rem;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-top: 1px solid rgba(255,255,255,0.08);
 }
 
 .final-vote-header {
@@ -471,7 +476,7 @@ function formatVote(vote: string): string {
 
 .final-vote-header .title {
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.75);
+  color: rgba(255,255,255,0.75);
   font-size: 1rem;
 }
 
@@ -512,12 +517,12 @@ function formatVote(vote: string): string {
   justify-content: space-between;
   margin-bottom: 1rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
 .final-vote-label {
   font-size: 0.875rem;
-  color: rgba(0, 0, 0, 0.55);
+  color: rgba(255,255,255,0.55);
 }
 
 .final-vote-value {
@@ -527,16 +532,16 @@ function formatVote(vote: string): string {
 
 .final-vote-card.STRONG_BUY .final-vote-value,
 .final-vote-card.BUY .final-vote-value {
-  color: #059669;
+  color: #34d399;
 }
 
 .final-vote-card.HOLD .final-vote-value {
-  color: #d97706;
+  color: #fbbf24;
 }
 
 .final-vote-card.SELL .final-vote-value,
 .final-vote-card.STRONG_SELL .final-vote-value {
-  color: #dc2626;
+  color: #ff4d4f;
 }
 
 .final-metrics {
@@ -553,23 +558,23 @@ function formatVote(vote: string): string {
 
 .final-metric .label {
   font-size: 0.6875rem;
-  color: rgba(0, 0, 0, 0.45);
+  color: rgba(255,255,255,0.45);
   text-transform: uppercase;
 }
 
 .final-metric .value {
   font-size: 1.125rem;
   font-weight: 600;
-  color: #1e293b;
+  color: #e4e4e7;
 }
 
 .final-reason {
   font-size: 0.9375rem;
-  color: rgba(0, 0, 0, 0.7);
+  color: rgba(255,255,255,0.7);
   line-height: 1.7;
   margin: 0;
   padding-top: 1rem;
-  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  border-top: 1px solid rgba(255,255,255,0.08);
 }
 
 /* 其他样式 */
@@ -587,7 +592,7 @@ function formatVote(vote: string): string {
 .analysis-title {
   font-size: 1rem;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.7);
+  color: rgba(255,255,255,0.7);
 }
 
 .decisions-container {
@@ -616,11 +621,11 @@ function formatVote(vote: string): string {
 
 .clarification-header .title {
   font-weight: 600;
-  color: #d97706;
+  color: #fbbf24;
 }
 
 .clarification-box .text {
-  color: rgba(0, 0, 0, 0.75);
+  color: rgba(255,255,255,0.75);
   font-size: 0.9375rem;
   line-height: 1.6;
   margin: 0;
@@ -628,16 +633,16 @@ function formatVote(vote: string): string {
 }
 
 .markdown-container {
-  background: rgba(0, 0, 0, 0.03);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 1rem;
   padding: 1.25rem;
 }
 
 .ai-bubble {
-  background: rgba(255, 255, 255, 0.85);
+  background: rgba(11,11,12,0.92);
   backdrop-filter: blur(24px);
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 1rem;
   border-top-left-radius: 0.125rem;
   padding: 1rem 1.25rem;
@@ -645,7 +650,7 @@ function formatVote(vote: string): string {
 }
 
 .ai-bubble .text {
-  color: rgba(0, 0, 0, 0.8);
+  color: rgba(255,255,255,0.8);
   font-size: 0.9375rem;
   line-height: 1.7;
   margin: 0;

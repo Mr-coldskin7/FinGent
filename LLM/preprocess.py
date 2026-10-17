@@ -7,7 +7,12 @@ from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, BaseMessage
 from dotenv import load_dotenv
-from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
+
+# MySQL checkpointer 仅用于测试/demo，惰性导入（默认环境不安装 mysql 依赖）
+try:
+    from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
+except ImportError:
+    PyMySQLSaver = None
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Iterator
 import os
@@ -44,19 +49,32 @@ class Preprocessor(Agent):
         date_30d_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
         year_start = f"{current_date[:4]}-01-01"
 
+        # 注册表 agent 列表 → 注入提示词，供语义选择参考（LLM/registry.py）
+        try:
+            from LLM.registry import all_agents as _registry_all_agents
+
+            _agent_catalog = list(_registry_all_agents().items())
+        except Exception:
+            _agent_catalog = []
+        agents_section = "\n".join(
+            f'- "{name}": {info.description}' for name, info in _agent_catalog
+        ) or "- （无可用 agent）"
+
         system_prompt = (
             "You are a financial query parser. Convert user questions to structured JSON.\n\n"
             "## Output Schema\n"
             "{\n"
             '  "status": "ready|clarification_needed",\n'
             '  "intent": {\n'
-            '    "type": "MARKET_DATA|COMPANY_INFO|REPORT_ANALYSIS|NEWS_SENTIMENT|TECHNICAL_ANALYSIS|RISK_MANAGEMENT|SUGGESTIONS|PORTFOLIO_RISK|SENTIMENT_CHECK"\n'
+            '    "type": "MARKET_DATA|COMPANY_INFO|REPORT_ANALYSIS|NEWS_SENTIMENT|TECHNICAL_ANALYSIS|RISK_MANAGEMENT|SUGGESTIONS|PORTFOLIO_RISK|SENTIMENT_CHECK|CHAT"\n'
             "  },\n"
             '  "entities": {\n'
             '    "symbols": ["英伟达"],\n'
             '    "names": ["英伟达"],\n'
             '    "code": ["NVDA"]\n'
             "  },\n"
+            '  "agent_selection": ["technical-nerd"],\n'
+            '  "agent_selection_reason": "一句话说明为何选这些 agent",\n'
             '  "time_range": {\n'
             '    "start": "YYYY-MM-DD",\n'
             '    "end": "YYYY-MM-DD"\n'
@@ -76,18 +94,27 @@ class Preprocessor(Agent):
             '   - "names": Company name in Chinese or English\n'
             '   - "code": Stock ticker/code (e.g., "688256", "NVDA", "600519")\n'
             '4. status="clarification_needed" when ambiguous (e.g., "金龙" matches multiple)\n'
-            "5. Return ONLY valid JSON, no markdown, no explanations\n\n"
+            '5. "agent_selection": pick 1-2 most relevant agents from the list below based on the user intent. Empty [] if not applicable. MUST use exact names from the list. Always also output "agent_selection_reason": one short Chinese sentence (<=40 chars) explaining the choice; use "" when agent_selection is [].\n'
+            '6. intent="CHAT" for greetings/thanks/capability questions/general conversation NOT about analyzing a specific stock or the market. entities empty, clarification null.\n'
+            "7. Return ONLY valid JSON, no markdown, no explanations\n\n"
+            "## Available Agents (semantic selection)\n"
+            + agents_section
+            + "\n\n"
             "## Examples\n"
             'Input: "达子今天股价多少"\n'
             f'Output: {{"status":"ready","intent":{{"type":"MARKET_DATA"}},"entities":{{"symbols":["NVDA"],"names":["英伟达"]}},"time_range":{{"start":"{current_date}","end":"{current_date}"}},"original_input":"达子今天股价多少","clarification":null}}\n\n'
             'Input: "金龙最近怎么样"\n'
             f'Output: {{"status":"clarification_needed","intent":{{"type":"MARKET_DATA"}},"entities":{{"symbols":[],"names":["金龙"]}},"time_range":{{"start":"{date_30d_ago}","end":"{current_date}"}},"original_input":"金龙最近怎么样","clarification":{{"issue_type":"AMBIGUOUS_NAME","message":"请指定具体股票","options":["金龙汽车(600686)","金龙羽(002882)","金龙鱼(300999)"]}}}}\n\n'
             'Input: "英伟达风险大吗，该买多少"\n'
-            f'Output: {{"status":"ready","intent":{{"type":"RISK_MANAGEMENT"}},"entities":{{"symbols":["NVDA"],"names":["英伟达"],"code":["NVDA"]}},"time_range":{{"start":"{date_30d_ago}","end":"{current_date}"}},"original_input":"英伟达风险大吗，该买多少","clarification":null}}\n\n'
+            f'Output: {{"status":"ready","intent":{{"type":"RISK_MANAGEMENT"}},"entities":{{"symbols":["NVDA"],"names":["英伟达"],"code":["NVDA"]}},"agent_selection":["risk-manager"],"agent_selection_reason":"问题聚焦风险评估与仓位，交给风险管理 Agent","time_range":{{"start":"{date_30d_ago}","end":"{current_date}"}},"original_input":"英伟达风险大吗，该买多少","clarification":null}}\n\n'
             'Input: "最近市场情绪怎么样"\n'
             f'Output: {{"status":"ready","intent":{{"type":"SENTIMENT_CHECK"}},"entities":{{"symbols":[],"names":[]}},"time_range":{{"start":"{date_30d_ago}","end":"{current_date}"}},"original_input":"最近市场情绪怎么样","clarification":null}}\n\n'
             'Input: "茅台舆情如何"\n'
-            f'Output: {{"status":"ready","intent":{{"type":"NEWS_SENTIMENT"}},"entities":{{"symbols":["贵州茅台"],"names":["贵州茅台"],"code":["600519"]}},"time_range":{{"start":"{date_30d_ago}","end":"{current_date}"}},"original_input":"茅台舆情如何","clarification":null}}'
+            f'Output: {{"status":"ready","intent":{{"type":"NEWS_SENTIMENT"}},"entities":{{"symbols":["贵州茅台"],"names":["贵州茅台"],"code":["600519"]}},"agent_selection":["sentiment-analyzer"],"agent_selection_reason":"问题问舆情，交给舆情分析 Agent","time_range":{{"start":"{date_30d_ago}","end":"{current_date}"}},"original_input":"茅台舆情如何","clarification":null}}\n\n'
+            'Input: "你好"\n'
+            f'Output: {{"status":"ready","intent":{{"type":"CHAT"}},"entities":{{"symbols":[],"names":[]}},"agent_selection":[],"agent_selection_reason":"","time_range":{{"start":"","end":""}},"original_input":"你好","clarification":null}}\n\n'
+            'Input: "你能做什么"\n'
+            f'Output: {{"status":"ready","intent":{{"type":"CHAT"}},"entities":{{"symbols":[],"names":[]}},"agent_selection":[],"agent_selection_reason":"","time_range":{{"start":"","end":""}},"original_input":"你能做什么","clarification":null}}'
         )
         tools = [fuzzy_search_us_symbols]
         super().__init__(model, tools, system_prompt, checkpointer)

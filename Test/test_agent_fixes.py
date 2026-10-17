@@ -142,38 +142,37 @@ class TestApiServerNoBareExcept:
         )
 
 
-class TestMainPyUsesRedis:
-    """Verify main.py uses Redis, not MySQL."""
+class TestMainPyUsesPluggableCheckpointer:
+    """Verify main.py delegates checkpointing to the pluggable factory
+    (LLM/checkpointer.py), instead of hardcoding Redis or MySQL."""
+
+    def _read(self, rel_path: str) -> str:
+        import os
+
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))), rel_path
+        )
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
 
     def test_no_mysql_import(self):
-        import os
-
-        path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "main.py",
-        )
-        with open(path, "r", encoding="utf-8") as f:
-            source = f.read()
-
+        source = self._read("main.py")
         assert "PyMySQLSaver" not in source, (
-            "main.py still imports PyMySQLSaver — should use AsyncRedisSaver"
+            "main.py still imports PyMySQLSaver — checkpointer 应走 LLM/checkpointer.py 工厂"
         )
-        assert "AsyncRedisSaver" in source
-
-    def test_uses_config_for_redis(self):
-        """Verify main.py uses config module for Redis URL, not raw os.getenv."""
-        import os
-
-        path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "main.py",
+        assert "get_checkpointer" in source, (
+            "main.py 应委托 LLM.checkpointer.get_checkpointer()，而非硬编码 Redis"
         )
-        with open(path, "r", encoding="utf-8") as f:
-            source = f.read()
 
-        # Should use config module
-        assert "from config import get_settings" in source
-        assert "settings.redis_url" in source
-        # Should NOT use raw os.getenv for redis
-        assert 'os.getenv("REDIS_URL"' not in source
-        assert "MYSQL_URL" not in source
+    def test_checkpointer_factory_owns_redis_config(self):
+        """Redis URL 查找应收敛在 LLM/checkpointer.py，main.py 不再关心存储实现。"""
+        main_source = self._read("main.py")
+        ckpt_source = self._read("LLM/checkpointer.py")
+
+        # LLM/checkpointer.py 持有 redis 配置查找（memory/redis 双模式）
+        assert "FINGENT_CHECKPOINTER" in ckpt_source
+        assert "redis" in ckpt_source
+        # main.py 不直接引用 redis 连接串（story: 存储实现与入口解耦）
+        assert "settings.redis_url" not in main_source
+        assert 'os.getenv("REDIS_URL"' not in main_source
+        assert "MYSQL_URL" not in ckpt_source

@@ -13,6 +13,7 @@ import sys
 import asyncio
 import argparse
 from datetime import datetime
+from typing import Optional
 from dotenv import load_dotenv
 
 # 加载环境变量
@@ -23,49 +24,38 @@ from config import get_settings
 settings = get_settings()
 
 # 导入LLM模块
-from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 from langchain_openai import ChatOpenAI
 
 # 导入FinGent组件
 from LLM.preprocess import Preprocessor
 from LLM.router import Router
-from LLM.agent import TECHNICAL_NERD, Morefit
 from LLM.graph import FinGraph
-from LLM.unified_stock_tools import (
-    get_stock_price,
-    get_stock_basic_info,
-    get_stock_company_info,
-    get_stock_financial_report_links,
-    get_stock_financial_statements,
-)
+from LLM.checkpointer import get_checkpointer
+from LLM.llm import create_chat_model
 from Data.memory import get_memory_manager
 import atexit
 
-# Redis checkpointer 上下文（全局，供清理使用）
-_redis_ctx = None
+# checkpointer 清理钩子（全局；redis 模式回收连接，memory 模式为空操作）
+_cleanup_ckpt = None
 
 
 @atexit.register
 def cleanup():
-    """程序退出时清理 Redis 连接"""
-    if _redis_ctx is not None:
+    """程序退出时回收 checkpointer 资源"""
+    global _cleanup_ckpt
+    if _cleanup_ckpt is not None:
         try:
-            asyncio.run(_redis_ctx.__aexit__(None, None, None))
+            _cleanup_ckpt()
         except Exception:
             pass
 
 
 def get_model(temperature: float = 0.5):
-    """获取配置的LLM模型"""
+    """获取配置的LLM模型（统一工厂，自动注入 opencode session header）"""
     if not settings.qianwen_api_key:
         raise ValueError("请设置 QIANWEN_API_KEY 环境变量")
 
-    return ChatOpenAI(
-        api_key=settings.qianwen_api_key,
-        base_url=settings.model_base_url,
-        model=settings.model_name,
-        temperature=temperature,
-    )
+    return create_chat_model(temperature=temperature)
 
 
 def create_fin_graph(temperature: float = 0.5):
@@ -78,42 +68,28 @@ def create_fin_graph(temperature: float = 0.5):
     Returns:
         FinGraph: 配置好的图实例
     """
-    # 初始化组件 - 使用 Redis 作为 checkpointer
-    global _redis_ctx
-    _redis_ctx = AsyncRedisSaver.from_conn_string(settings.redis_url)
-    checkpointer = asyncio.run(_redis_ctx.__aenter__())
+    # 初始化组件 - checkpointer 可插拔：FINGENT_CHECKPOINTER=memory(默认)|redis
+    global _cleanup_ckpt
+    checkpointer, _cleanup_ckpt = get_checkpointer()
     model = get_model(temperature=temperature)
     memory_manager = get_memory_manager()
 
     preprocessor = Preprocessor(model, checkpointer)
     router = Router()
 
-    # 创建Agent实例 - 使用统一股票工具，注入 L3 记忆管理器
-    tech_agent = TECHNICAL_NERD(
-        model=model,
-        tools=[get_stock_price, get_stock_basic_info],
-        checkpointer=checkpointer,
-        memory_manager=memory_manager,
-    )
+    # 创建Agent实例 — 全部由注册表装配（新增 DIY agent = 丢 skills 目录即自动参与）
+    from LLM.registry import all_agents as _registry_all_agents, instantiate as _instantiate
 
-    morefit_agent = Morefit(
-        model=model,
-        tools=[
-            get_stock_company_info,
-            get_stock_financial_report_links,
-            get_stock_financial_statements,
-            get_stock_price,
-            get_stock_basic_info,
-        ],
-        checkpointer=checkpointer,
-        memory_manager=memory_manager,
-    )
+    agents = {
+        name: _instantiate(name, model, checkpointer, memory_manager)
+        for name in _registry_all_agents()
+    }
 
     # 构建图
     fin_graph = FinGraph(
         preprocessor=preprocessor,
         router=router,
-        agent={"TECHNICAL_NERD": tech_agent, "Morefit": morefit_agent},
+        agent=agents,
         checkpointer=checkpointer,
         memory_manager=memory_manager,
     )
@@ -121,7 +97,7 @@ def create_fin_graph(temperature: float = 0.5):
     return fin_graph
 
 
-async def interactive_mode(fin_graph: FinGraph):
+async def interactive_mode(fin_graph: FinGraph, agents: Optional[list] = None):
     """
     交互式对话模式
 
@@ -165,7 +141,7 @@ async def interactive_mode(fin_graph: FinGraph):
                 continue
 
             # 执行分析
-            result = await fin_graph.run(user_input, thread_id)
+            result = await fin_graph.run(user_input, thread_id, agents=agents)
 
             # 处理需要澄清的情况
             if result.get("status") == "waiting_for_clarification":
@@ -188,20 +164,23 @@ async def interactive_mode(fin_graph: FinGraph):
             print(f"\n❌ 错误: {e}")
 
 
-async def single_query(fin_graph: FinGraph, query: str):
+async def single_query(fin_graph: FinGraph, query: str, agents: Optional[list] = None):
     """
     单次查询模式
 
     Args:
         fin_graph: FinGraph实例
         query: 用户查询
+        agents: 显式指定的 agent 名单（注册表名），缺省=语义选择
     """
     thread_id = f"single_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
 
     print(f"\n🔍 查询: {query}")
+    if agents:
+        print(f"👥 指定 Agent: {agents}")
     print("-" * 60)
 
-    result = await fin_graph.run(query, thread_id)
+    result = await fin_graph.run(query, thread_id, agents=agents)
 
     if result.get("status") == "waiting_for_clarification":
         print(f"\n⚠️ 需要澄清: {result.get('result')}")
@@ -316,6 +295,12 @@ async def main_async():
     parser.add_argument("--query", "-q", dest="explicit_query", help="显式指定查询内容")
 
     parser.add_argument(
+        "--agents",
+        default=None,
+        help="显式指定参与分析的 agent（逗号分隔，注册表名，如 technical-nerd,risk-manager）",
+    )
+
+    parser.add_argument(
         "--test-voting",
         "-t",
         dest="test_voting",
@@ -329,22 +314,26 @@ async def main_async():
 
     # 确定查询内容
     query = args.explicit_query or args.query
+    # 显式 agent 名单（注册表名）
+    agents = None
+    if args.agents:
+        agents = [a.strip() for a in args.agents.split(",") if a.strip()]
 
     try:
         # 创建FinGraph
         print("🚀 正在初始化 FinGent...")
         fin_graph = create_fin_graph()
-        print("✅ 初始化完成\n")
+        print(f"✅ 初始化完成（注册 agent: {list(fin_graph.agent.keys())}）")
 
         if args.test_voting:
             # 双Agent投票测试模式
             await test_dual_agent_voting(fin_graph, args.test_voting)
         elif query:
             # 单次查询模式
-            await single_query(fin_graph, query)
+            await single_query(fin_graph, query, agents=agents)
         else:
             # 交互式模式
-            await interactive_mode(fin_graph)
+            await interactive_mode(fin_graph, agents=agents)
 
     except ValueError as e:
         print(f"\n❌ 配置错误: {e}")

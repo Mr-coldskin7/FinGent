@@ -45,11 +45,15 @@ class InfoService:
         try:
             from config import get_settings
             _settings = get_settings()
-            self.cache = CacheManager(
-                default_ttl=cache_ttl,
-                redis_url=_settings.redis_url,
-                redis_ttl=_settings.cache_redis_ttl,
-            )
+            if _settings.cache_backend == "redis":
+                self.cache = CacheManager(
+                    default_ttl=cache_ttl,
+                    redis_url=_settings.redis_url,
+                    redis_ttl=_settings.cache_redis_ttl,
+                )
+            else:
+                # memory 模式：不触碰 Redis，仅使用 L1
+                self.cache = CacheManager(default_ttl=cache_ttl)
         except Exception:
             self.cache = CacheManager(default_ttl=cache_ttl)
 
@@ -107,6 +111,11 @@ class InfoService:
             Tuple[market, symbol]: 市场类型(US/CN)和标准化代码
         """
         identifier = identifier.strip()
+
+        # 美股名称映射优先（含中文别名，如 SK海力士→SKHY、海力士→SKHY；需先于中文->A股分支）
+        us_hit = us_stock.input2Symbol(identifier)
+        if us_hit:
+            return "US", us_hit
 
         # A股：中文名称（最先判断，避免纯中文被误判）
         # 如果包含中文字符，直接尝试A股转换

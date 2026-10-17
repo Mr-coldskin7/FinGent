@@ -84,6 +84,9 @@ class Settings(BaseSettings):
     memory_db_path: Optional[str] = Field(default=None, alias="FINGENT_MEMORY_DB")
 
     # ── 缓存 ─────────────────────────────────────────────────────────
+    # memory: 仅 L1 进程内缓存（默认）；redis: 额外连接 REDIS_URL 作 L2。
+    # REDIS_URL 仍服务 checkpointer 等其它组件，与本开关无关。
+    cache_backend: str = Field(default="memory", alias="CACHE_BACKEND")
     cache_default_ttl: int = Field(default=300, alias="CACHE_DEFAULT_TTL")
     cache_redis_ttl: int = Field(default=600, alias="CACHE_REDIS_TTL")
 

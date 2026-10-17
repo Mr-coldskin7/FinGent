@@ -52,8 +52,8 @@ const CHART_CONFIG = {
     priceFill: 'rgba(59, 130, 246, 0.1)',
     buyMarker: '#22c55e',
     sellMarker: '#ef4444',
-    portfolioLine: '#8b5cf6',
-    portfolioFill: 'rgba(139, 92, 246, 0.1)',
+    portfolioLine: '#f5a524',
+    portfolioFill: 'rgba(245,165,36,0.1)',
     grid: 'rgba(255, 255, 255, 0.1)',
     text: 'rgba(255, 255, 255, 0.6)'
   }
@@ -91,7 +91,7 @@ const drawChart = () => {
   // 清空画布
   ctx.clearRect(0, 0, width, height);
   
-  const { price_data, trade_markers, statistics } = props.data;
+  const { price_data, trade_markers } = props.data;
   
   // 计算绘图区域
   const chartWidth = width - padding.left - padding.right;
@@ -259,8 +259,10 @@ const drawChart = () => {
   
   // X轴日期标签
   for (let i = 0; i < price_data.length; i += 5) {
+    const d = price_data[i];
+    if (!d) continue;
     const x = getX(i);
-    ctx.fillText(formatDate(price_data[i].date), x, height - padding.bottom + 20);
+    ctx.fillText(formatDate(d.date), x, height - padding.bottom + 20);
   }
   
   // Y轴价格标签 (左侧)
@@ -333,21 +335,25 @@ const drawChart = () => {
 
 // 鼠标移动事件 - 显示tooltip
 const handleMouseMove = (e: MouseEvent) => {
-  if (!canvasRef.value || !props.data?.price_data?.length) return;
+  const priceData = props.data?.price_data;
+  if (!canvasRef.value || !priceData?.length) return;
   
   const canvas = canvasRef.value;
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
   
   const { padding } = CHART_CONFIG;
   const chartWidth = rect.width - padding.left - padding.right;
   
   // 计算数据索引
-  const dataIndex = Math.round((x - padding.left) / (chartWidth / (props.data.price_data.length - 1)));
+  const dataIndex = Math.round((x - padding.left) / (chartWidth / (priceData.length - 1)));
   
-  if (dataIndex >= 0 && dataIndex < props.data.price_data.length) {
-    const data = props.data.price_data[dataIndex];
+  if (dataIndex >= 0 && dataIndex < priceData.length) {
+    const data = priceData[dataIndex];
+    if (!data) {
+      tooltip.value.show = false;
+      return;
+    }
     tooltip.value = {
       show: true,
       x: e.clientX + 10,
@@ -395,7 +401,7 @@ const returnColor = computed(() => {
   <div class="backtest-chart">
     <div class="chart-header">
       <h3 class="chart-title">
-        📈 {{ data?.symbol || 'Backtest' }} Chart
+        {{ data?.symbol || 'Backtest' }} Chart
       </h3>
       <div v-if="data?.statistics" class="chart-stats">
         <span class="stat-item">
@@ -412,7 +418,7 @@ const returnColor = computed(() => {
           Final: ${{ formatNumber(data.statistics.final_value, 0) }}
         </span>
         <button class="export-btn" @click="exportChart" title="导出图片">
-          💾
+          
         </button>
       </div>
     </div>
@@ -446,8 +452,8 @@ const returnColor = computed(() => {
 
 <style scoped>
 .backtest-chart {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
   border-radius: 1rem;
   padding: 1.25rem;
   margin-bottom: 1.5rem;
@@ -465,7 +471,7 @@ const returnColor = computed(() => {
 .chart-title {
   font-size: 1rem;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
+  color: rgba(255,255,255,0.95);
   margin: 0;
 }
 
@@ -478,7 +484,7 @@ const returnColor = computed(() => {
 
 .stat-item {
   font-size: 0.8125rem;
-  color: rgba(255, 255, 255, 0.6);
+  color: rgba(255,255,255,0.6);
 }
 
 .stat-value {
@@ -493,8 +499,8 @@ const returnColor = computed(() => {
 
 .export-btn {
   padding: 0.375rem 0.625rem;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
   border-radius: 0.375rem;
   cursor: pointer;
   font-size: 0.875rem;
@@ -502,7 +508,7 @@ const returnColor = computed(() => {
 }
 
 .export-btn:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255,255,255,0.12);
 }
 
 .chart-container {
@@ -526,15 +532,15 @@ const returnColor = computed(() => {
   align-items: center;
   justify-content: center;
   gap: 0.75rem;
-  color: rgba(255, 255, 255, 0.4);
+  color: rgba(255,255,255,0.4);
   font-size: 0.875rem;
 }
 
 .loading-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid rgba(139, 92, 246, 0.2);
-  border-top-color: #8b5cf6;
+  border: 3px solid rgba(245,165,36,0.2);
+  border-top-color: #f5a524;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
@@ -545,8 +551,8 @@ const returnColor = computed(() => {
 
 .chart-tooltip {
   position: fixed;
-  background: rgba(0, 0, 0, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255,255,255,0.9);
+  border: 1px solid rgba(255,255,255,0.2);
   border-radius: 0.5rem;
   padding: 0.75rem;
   pointer-events: none;
@@ -556,11 +562,11 @@ const returnColor = computed(() => {
 }
 
 .chart-tooltip :deep(.tooltip-date) {
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255,255,255,0.9);
   font-weight: 600;
   margin-bottom: 0.5rem;
   padding-bottom: 0.5rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 
 .chart-tooltip :deep(.tooltip-row) {
@@ -568,7 +574,7 @@ const returnColor = computed(() => {
   justify-content: space-between;
   gap: 1rem;
   margin-top: 0.25rem;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(255,255,255,0.7);
 }
 
 @media (max-width: 768px) {

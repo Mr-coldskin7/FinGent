@@ -32,8 +32,8 @@ def run_backtest_cli(args):
 
     # 导入依赖
     try:
-        from langgraph.checkpoint.redis.aio import AsyncRedisSaver
         from langchain_openai import ChatOpenAI
+        from LLM.checkpointer import get_checkpointer
         from LLM.preprocess import Preprocessor
         from LLM.router import Router
         from LLM.agent import TECHNICAL_NERD, Morefit
@@ -45,10 +45,11 @@ def run_backtest_cli(args):
             get_stock_financial_report_links,
             get_stock_financial_statements,
         )
+        from LLM.llm import create_chat_model
         from Trade.runner import run_backtest_from_symbol
     except ImportError as e:
         print(f"❌ 导入失败: {e}")
-        print("请确保在正确的环境中运行")
+        print("请在正确的环境中运行（uv sync --group backtest）")
         return None
 
     # 检查 API Key
@@ -58,43 +59,24 @@ def run_backtest_cli(args):
         print("请先设置: set QIANWEN_API_KEY=your_api_key")
         return None
 
-    # 初始化模型
+    # 初始化模型（统一工厂，自动注入 opencode session header）
     print("\n[1/4] 初始化模型...")
-    model = ChatOpenAI(
-        api_key=api_key,
-        base_url=os.getenv(
-            "MODEL_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        ),
-        model="qwen-max",
-        temperature=args.temperature,
-    )
-    # 使用 Redis 作为异步 Checkpoint 存储
+    model = create_chat_model(temperature=args.temperature)
+    # Checkpointer 可插拔：FINGENT_CHECKPOINTER=memory(默认)|redis
     import asyncio
 
-    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-    _redis_ctx = AsyncRedisSaver.from_conn_string(redis_url)
-    checkpointer = asyncio.run(_redis_ctx.__aenter__())
+    checkpointer, _ = get_checkpointer()
 
-    # 构建 Graph
+    # 构建 Graph（注册表装配，回测用精简双 agent：技术 + 基本面）
     print("[2/4] 构建 FinGraph...")
+    from LLM.registry import instantiate as _reg_instantiate
+
     fin_graph = FinGraph(
         preprocessor=Preprocessor(model, checkpointer),
         router=Router(),
         agent={
-            "TECHNICAL_NERD": TECHNICAL_NERD(
-                model, [get_stock_price, get_stock_basic_info], checkpointer
-            ),
-            "Morefit": Morefit(
-                model,
-                [
-                    get_stock_company_info,
-                    get_stock_financial_report_links,
-                    get_stock_financial_statements,
-                    get_stock_price,
-                    get_stock_basic_info,
-                ],
-                checkpointer,
-            ),
+            name: _reg_instantiate(name, model, checkpointer)
+            for name in ("technical-nerd", "morefit")
         },
         checkpointer=checkpointer,
     )

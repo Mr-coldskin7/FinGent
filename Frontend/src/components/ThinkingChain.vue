@@ -55,14 +55,14 @@ function isToolDetailsVisible(stepId: string): boolean {
 
 function getStepIcon(type: string): string {
   const icons: Record<string, string> = {
-    'input': '👤',
-    'thinking': '💭',
-    'tool_decision': '🎯',
-    'tool_call': '🔧',
-    'tool_result': '📊',
-    'observation': '👁️',
-    'analysis': '🧠',
-    'conclusion': '✅'
+    'input': '',
+    'thinking': '',
+    'tool_decision': '',
+    'tool_call': '',
+    'tool_result': '',
+    'observation': '',
+    'analysis': '',
+    'conclusion': ''
   };
   return icons[type] || '•';
 }
@@ -89,12 +89,6 @@ function getStatusColor(status: string): string {
     'error': '#ef4444'
   };
   return colors[status] || '#6b7280';
-}
-
-function formatArgs(args: Record<string, any>): string {
-  const entries = Object.entries(args);
-  if (entries.length === 0) return '无参数';
-  return entries.map(([k, v]) => `${k}=${JSON.stringify(v).slice(0, 50)}`).join(', ');
 }
 
 const completedStepsCount = computed(() => {
@@ -154,7 +148,7 @@ const groupedSteps = computed(() => {
     <!-- 头部 -->
     <div class="chain-header">
       <div class="header-left">
-        <span class="header-icon">🧠</span>
+        <span class="header-icon"></span>
         <span class="header-title">Agent 思维链</span>
       </div>
       <div class="header-right">
@@ -222,7 +216,7 @@ const groupedSteps = computed(() => {
           <div class="step-connector tool-connector">
             <div class="connector-line"></div>
             <div class="status-dot tool-dot" :style="{ background: '#fbbf24' }">
-              <span>🔧</span>
+              <span></span>
             </div>
           </div>
           
@@ -230,7 +224,7 @@ const groupedSteps = computed(() => {
             <!-- 工具调用头部 -->
             <div class="tool-header">
               <div class="tool-title">
-                <span class="tool-icon">⚡</span>
+                <span class="tool-icon"></span>
                 <span>工具调用</span>
                 <span class="tool-name">{{ group.callStep.title }}</span>
               </div>
@@ -302,8 +296,8 @@ const groupedSteps = computed(() => {
 
 <style scoped>
 .thinking-chain {
-  background: rgba(255, 255, 255, 0.6);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(11,11,12,0.92);
+  border: 1px solid rgba(255,255,255,0.06);
   border-radius: 1rem;
   overflow: hidden;
 }
@@ -313,8 +307,8 @@ const groupedSteps = computed(() => {
   align-items: center;
   justify-content: space-between;
   padding: 1rem 1.25rem;
-  background: rgba(0, 0, 0, 0.02);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  background: rgba(255,255,255,0.02);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
 .header-left {
@@ -330,7 +324,7 @@ const groupedSteps = computed(() => {
 .header-title {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.8);
+  color: rgba(255,255,255,0.8);
 }
 
 .header-right {
@@ -342,7 +336,7 @@ const groupedSteps = computed(() => {
 .progress-bar {
   width: 80px;
   height: 4px;
-  background: rgba(0, 0, 0, 0.08);
+  background: rgba(255,255,255,0.08);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -356,7 +350,7 @@ const groupedSteps = computed(() => {
 
 .progress-text {
   font-size: 0.75rem;
-  color: rgba(0, 0, 0, 0.5);
+  color: rgba(255,255,255,0.5);
   font-family: monospace;
 }
 
@@ -387,7 +381,7 @@ const groupedSteps = computed(() => {
 .connector-line {
   width: 2px;
   flex: 1;
-  background: rgba(0, 0, 0, 0.08);
+  background: rgba(255,255,255,0.08);
   margin-bottom: 4px;
 }
 
@@ -412,7 +406,7 @@ const groupedSteps = computed(() => {
 .status-dot .pulse {
   width: 8px;
   height: 8px;
-  background: white;
+  background: #0b0b0c;
   border-radius: 50%;
   animation: pulse 1.5s ease-in-out infinite;
 }
@@ -424,8 +418,8 @@ const groupedSteps = computed(() => {
 
 .step-content {
   flex: 1;
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: rgba(11,11,12,0.92);
+  border: 1px solid rgba(255,255,255,0.05);
   border-radius: 0.75rem;
   padding: 0.875rem 1rem;
   cursor: pointer;
@@ -433,12 +427,12 @@ const groupedSteps = computed(() => {
 }
 
 .step-content:hover {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(11,11,12,0.92);
+  border-color: rgba(255,255,255,0.08);
 }
 
 .step-item.expanded .step-content {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(11,11,12,0.92);
 }
 
 .step-header {
@@ -460,7 +454,7 @@ const groupedSteps = computed(() => {
 
 .type-label {
   font-size: 0.6875rem;
-  color: rgba(0, 0, 0, 0.5);
+  color: rgba(255,255,255,0.5);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -469,7 +463,7 @@ const groupedSteps = computed(() => {
   font-size: 0.625rem;
   padding: 0.125rem 0.375rem;
   background: rgba(59, 130, 246, 0.1);
-  color: #2563eb;
+  color: #60a5fa;
   border-radius: 9999px;
   margin-left: 0.25rem;
 }
@@ -482,38 +476,38 @@ const groupedSteps = computed(() => {
 .step-title {
   font-size: 0.9375rem;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.85);
+  color: rgba(255,255,255,0.85);
   margin-bottom: 0.375rem;
 }
 
 .step-preview {
   font-size: 0.8125rem;
-  color: rgba(0, 0, 0, 0.55);
+  color: rgba(255,255,255,0.55);
   line-height: 1.5;
 }
 
 .step-details {
   margin-top: 0.75rem;
   padding-top: 0.75rem;
-  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  border-top: 1px solid rgba(255,255,255,0.05);
 }
 
 .detail-content {
   font-size: 0.875rem;
-  color: rgba(0, 0, 0, 0.75);
+  color: rgba(255,255,255,0.75);
   line-height: 1.7;
   margin-bottom: 0.75rem;
 }
 
 .detail-extra {
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(255,255,255,0.04);
   border-radius: 0.5rem;
   padding: 0.75rem;
 }
 
 .extra-label {
   font-size: 0.6875rem;
-  color: rgba(0, 0, 0, 0.45);
+  color: rgba(255,255,255,0.45);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: 0.375rem;
@@ -521,7 +515,7 @@ const groupedSteps = computed(() => {
 
 .extra-text {
   font-size: 0.75rem;
-  color: rgba(0, 0, 0, 0.65);
+  color: rgba(255,255,255,0.65);
   line-height: 1.6;
   margin: 0;
   white-space: pre-wrap;
@@ -534,13 +528,13 @@ const groupedSteps = computed(() => {
   justify-content: center;
   margin-top: 0.5rem;
   padding-top: 0.5rem;
-  border-top: 1px solid rgba(0, 0, 0, 0.04);
+  border-top: 1px solid rgba(255,255,255,0.04);
 }
 
 .arrow-icon {
   width: 1rem;
   height: 1rem;
-  color: rgba(0, 0, 0, 0.3);
+  color: rgba(255,255,255,0.3);
   transition: transform 0.2s;
 }
 
@@ -602,7 +596,7 @@ const groupedSteps = computed(() => {
   align-items: center;
   gap: 0.25rem;
   font-size: 0.75rem;
-  color: rgba(0, 0, 0, 0.5);
+  color: rgba(255,255,255,0.5);
 }
 
 .toggle-text {
@@ -621,12 +615,12 @@ const groupedSteps = computed(() => {
 
 .summary-label {
   font-size: 0.75rem;
-  color: rgba(0, 0, 0, 0.45);
+  color: rgba(255,255,255,0.45);
 }
 
 .summary-value {
   font-size: 0.8125rem;
-  color: rgba(0, 0, 0, 0.7);
+  color: rgba(255,255,255,0.7);
   font-family: monospace;
 }
 
@@ -674,7 +668,7 @@ const groupedSteps = computed(() => {
 .step-label {
   font-size: 0.75rem;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.6);
+  color: rgba(255,255,255,0.6);
 }
 
 .tool-step-content {
@@ -682,7 +676,7 @@ const groupedSteps = computed(() => {
 }
 
 .code-block {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgba(255,255,255,0.05);
   border-radius: 0.5rem;
   overflow: hidden;
 }
@@ -692,14 +686,14 @@ const groupedSteps = computed(() => {
   align-items: center;
   justify-content: space-between;
   padding: 0.375rem 0.75rem;
-  background: rgba(0, 0, 0, 0.03);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  background: rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
 .code-lang {
   font-size: 0.625rem;
   text-transform: uppercase;
-  color: rgba(0, 0, 0, 0.45);
+  color: rgba(255,255,255,0.45);
   font-weight: 600;
   letter-spacing: 0.05em;
 }
@@ -707,7 +701,7 @@ const groupedSteps = computed(() => {
 .code-content {
   padding: 0.75rem;
   font-size: 0.75rem;
-  color: rgba(0, 0, 0, 0.75);
+  color: rgba(255,255,255,0.75);
   line-height: 1.6;
   margin: 0;
   white-space: pre-wrap;

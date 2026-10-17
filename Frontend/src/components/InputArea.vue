@@ -56,7 +56,7 @@ const handleSend = () => {
       <div class="input-content">
         <!-- Icon -->
         <div class="input-icon" :class="{ clarification: needsClarification }">
-          {{ needsClarification ? '💬' : '✨' }}
+          {{ needsClarification ? '?' : '›' }}
         </div>
 
         <!-- Textarea -->
@@ -104,16 +104,16 @@ const handleSend = () => {
 <style scoped>
 .input-area {
   padding: 1.25rem 1.5rem;
-  background: linear-gradient(to top, rgba(248, 250, 252, 0.98), transparent);
+  background: linear-gradient(to top, #000000, transparent);
 }
 
 .input-wrapper {
   position: relative;
   max-width: 56rem;
   margin: 0 auto;
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(11,11,12,0.92);
   backdrop-filter: blur(24px);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(255,255,255,0.1);
   border-radius: 1.125rem;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -173,7 +173,7 @@ const handleSend = () => {
 .textarea {
   flex: 1;
   background: transparent;
-  color: #1e293b;
+  color: #e4e4e7;
   font-size: 0.9375rem;
   line-height: 1.6;
   resize: none;
@@ -186,7 +186,7 @@ const handleSend = () => {
 }
 
 .textarea::placeholder {
-  color: rgba(0, 0, 0, 0.35);
+  color: rgba(255,255,255,0.35);
 }
 
 .textarea:disabled {
@@ -201,8 +201,8 @@ const handleSend = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.05);
-  color: rgba(0, 0, 0, 0.35);
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.35);
   border: none;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -237,7 +237,7 @@ const handleSend = () => {
 .spinner-dot {
   width: 4px;
   height: 4px;
-  background: rgba(255, 255, 255, 0.6);
+  background: rgba(11,11,12,0.92);
   border-radius: 50%;
   animation: bounce 1.4s infinite ease-in-out;
 }
@@ -253,7 +253,7 @@ const handleSend = () => {
 .hint {
   text-align: center;
   font-size: 0.75rem;
-  color: rgba(0, 0, 0, 0.35);
+  color: rgba(255,255,255,0.35);
   margin-top: 0.875rem;
   letter-spacing: 0.02em;
 }

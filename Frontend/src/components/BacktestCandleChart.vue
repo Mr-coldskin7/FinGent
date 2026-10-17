@@ -16,6 +16,7 @@ interface TradeMarker {
   type: 'buy' | 'sell';
   price: number;
   size: number;
+  reason?: string;
 }
 
 interface ChartStatistics {
@@ -77,15 +78,15 @@ const initChart = () => {
     width: rect.width,
     height: rect.height,
     layout: {
-      background: { type: ColorType.Solid, color: '#ffffff' },
-      textColor: 'rgba(0, 0, 0, 0.6)',
+      background: { type: ColorType.Solid, color: '#0b0b0c' },
+      textColor: 'rgba(255, 255, 255, 0.6)',
     },
     grid: {
-      vertLines: { color: 'rgba(0, 0, 0, 0.06)' },
-      horzLines: { color: 'rgba(0, 0, 0, 0.06)' },
+      vertLines: { color: 'rgba(255,255,255,0.06)' },
+      horzLines: { color: 'rgba(255,255,255,0.06)' },
     },
     timeScale: {
-      borderColor: 'rgba(0, 0, 0, 0.1)',
+      borderColor: 'rgba(255,255,255,0.1)',
       timeVisible: true,
     },
   });
@@ -111,7 +112,7 @@ const initChart = () => {
   // 创建成交量系列 - v5 API
   try {
     volumeSeries.value = newChart.addSeries(HistogramSeries, {
-      color: '#3b82f6',
+      color: '#60a5fa',
       priceScaleId: 'volume',
     });
     volumeSeries.value.priceScale().applyOptions({
@@ -186,7 +187,7 @@ const updateChart = () => {
     const markers = data.trade_markers.map(trade => ({
       time: trade.time,
       position: (trade.type === 'buy' ? 'belowBar' : 'aboveBar') as 'belowBar' | 'aboveBar',
-      color: trade.type === 'buy' ? '#22c55e' : '#ef4444',
+      color: trade.type === 'buy' ? '#22c55e' : '#ff4d4f',
       shape: (trade.type === 'buy' ? 'arrowUp' : 'arrowDown') as 'arrowUp' | 'arrowDown',
       text: trade.reason 
         ? `${trade.type === 'buy' ? '买入' : '卖出'} ${trade.size}股\n${trade.reason.substring(0, 30)}...`
@@ -255,7 +256,7 @@ const formatNumber = (num: number | undefined, decimals = 2) => {
   <div class="candle-chart">
     <div class="chart-header">
       <h3 class="chart-title">
-        📊 {{ data?.symbol || 'Stock' }} K线图
+        {{ data?.symbol || 'Stock' }} K线图
         <span v-if="hasData" class="candle-count">
           {{ data?.candles?.length }}根K线
         </span>
@@ -288,8 +289,8 @@ const formatNumber = (num: number | undefined, decimals = 2) => {
 
 <style scoped>
 .candle-chart {
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(11,11,12,0.92);
+  border: 1px solid rgba(255,255,255,0.06);
   border-radius: 1rem;
   padding: 1.25rem;
   margin-bottom: 1.5rem;
@@ -307,7 +308,7 @@ const formatNumber = (num: number | undefined, decimals = 2) => {
 .chart-title {
   font-size: 1rem;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.9);
+  color: rgba(255,255,255,0.9);
   margin: 0;
   display: flex;
   align-items: center;
@@ -316,8 +317,8 @@ const formatNumber = (num: number | undefined, decimals = 2) => {
 
 .candle-count {
   font-size: 0.75rem;
-  color: rgba(0, 0, 0, 0.5);
-  background: rgba(0, 0, 0, 0.05);
+  color: rgba(255,255,255,0.5);
+  background: rgba(255,255,255,0.05);
   padding: 0.125rem 0.5rem;
   border-radius: 9999px;
 }
@@ -330,17 +331,17 @@ const formatNumber = (num: number | undefined, decimals = 2) => {
 
 .stat-item {
   font-size: 0.8125rem;
-  color: rgba(0, 0, 0, 0.6);
+  color: rgba(255,255,255,0.6);
 }
 
 .positive { color: #22c55e; }
-.negative { color: #ef4444; }
+.negative { color: #ff4d4f; }
 
 .chart-wrapper {
   width: 100%;
   height: 450px;
   position: relative;
-  background: rgba(0, 0, 0, 0.03);
+  background: rgba(255,255,255,0.03);
   border-radius: 0.5rem;
 }
 
@@ -357,7 +358,7 @@ const formatNumber = (num: number | undefined, decimals = 2) => {
   align-items: center;
   justify-content: center;
   gap: 0.75rem;
-  color: rgba(0, 0, 0, 0.4);
+  color: rgba(255,255,255,0.4);
   font-size: 0.875rem;
   z-index: 10;
 }
@@ -365,8 +366,8 @@ const formatNumber = (num: number | undefined, decimals = 2) => {
 .loading-spinner {
   width: 32px;
   height: 32px;
-  border: 3px solid rgba(139, 92, 246, 0.15);
-  border-top-color: #7c3aed;
+  border: 3px solid rgba(245,165,36,0.15);
+  border-top-color: #f5a524;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }

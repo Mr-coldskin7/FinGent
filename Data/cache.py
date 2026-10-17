@@ -61,7 +61,7 @@ class CacheManager:
                 self._redis.ping()
                 logger.info(f"CacheManager L2 Redis connected: {redis_url}")
             except Exception as e:
-                logger.warning(f"CacheManager Redis 连接失败，仅使用 L1: {e}")
+                logger.info(f"CacheManager 未连接 L2 Redis（{e}），使用 L1 内存缓存")
                 self._redis = None
 
     def _make_key(self, symbol: str, data_types: Tuple[str, ...]) -> str:

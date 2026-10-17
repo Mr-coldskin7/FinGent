@@ -10,7 +10,7 @@ defineProps<Props>();
   <header class="header">
     <div class="header-content">
       <div class="brand">
-        <span class="brand-icon">🤖</span>
+        <span class="brand-icon"></span>
         <div class="brand-text">
           <h1>FinGent</h1>
           <span class="brand-tagline">智能股票分析</span>
@@ -27,8 +27,8 @@ defineProps<Props>();
 <style scoped>
 .header {
   padding: 1rem 1.5rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-  background: rgba(255, 255, 255, 0.7);
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  background: rgba(11,11,12,0.92);
   backdrop-filter: blur(20px);
 }
 
@@ -61,15 +61,15 @@ defineProps<Props>();
   font-weight: 700;
   color: white;
   margin: 0;
-  background: linear-gradient(to right, #60a5fa, #34d399);
+  background: none;
   -webkit-background-clip: text;
   background-clip: text;
-  -webkit-text-fill-color: transparent;
+  -webkit-text-fill-color: #f4f4f5;
 }
 
 .brand-tagline {
   font-size: 0.6875rem;
-  color: rgba(0, 0, 0, 0.45);
+  color: rgba(255,255,255,0.45);
   letter-spacing: 0.05em;
 }
 
@@ -78,22 +78,22 @@ defineProps<Props>();
   align-items: center;
   gap: 0.5rem;
   padding: 0.375rem 0.875rem;
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(255,255,255,0.04);
   border-radius: 9999px;
-  border: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
 .thread-label {
   font-size: 0.625rem;
   text-transform: uppercase;
-  color: rgba(0, 0, 0, 0.45);
+  color: rgba(255,255,255,0.45);
   letter-spacing: 0.1em;
   font-weight: 600;
 }
 
 .thread-id {
   font-size: 0.75rem;
-  color: rgba(0, 0, 0, 0.65);
+  color: rgba(255,255,255,0.65);
   font-family: monospace;
   letter-spacing: 0.05em;
 }

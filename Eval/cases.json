@@ -1,0 +1,22 @@
+[
+  {
+    "id": "chat",
+    "query": "你好",
+    "expect_route": "chat",
+    "timeout_s": 120
+  },
+  {
+    "id": "single_morefit",
+    "query": "茅台估值高吗？",
+    "agents": ["morefit"],
+    "expect_route": "single",
+    "timeout_s": 300
+  },
+  {
+    "id": "multi_nvda",
+    "query": "英伟达现在值得买吗？给出投资建议",
+    "agents": ["technical-nerd", "morefit", "risk-manager", "sentiment-analyzer"],
+    "expect_route": "multi",
+    "timeout_s": 400
+  }
+]

@@ -18,31 +18,31 @@ class TestRouterRoute:
 
     def test_technical_analysis(self, router):
         result = router.route(self._make_preprocess("TECHNICAL_ANALYSIS"))
-        assert result == "TECHNICAL_NERD"
+        assert result == "technical-nerd"
 
     def test_company_info(self, router):
         result = router.route(self._make_preprocess("COMPANY_INFO"))
-        assert result == "Morefit"
+        assert result == "morefit"
 
     def test_report_analysis(self, router):
         result = router.route(self._make_preprocess("REPORT_ANALYSIS"))
-        assert result == "Morefit"
+        assert result == "morefit"
 
     def test_news_sentiment(self, router):
         result = router.route(self._make_preprocess("NEWS_SENTIMENT"))
-        assert result == "SentimentAnalyzer"
+        assert result == "sentiment-analyzer"
 
     def test_sentiment_check(self, router):
         result = router.route(self._make_preprocess("SENTIMENT_CHECK"))
-        assert result == "SentimentAnalyzer"
+        assert result == "sentiment-analyzer"
 
     def test_risk_management(self, router):
         result = router.route(self._make_preprocess("RISK_MANAGEMENT"))
-        assert result == "RiskManager"
+        assert result == "risk-manager"
 
     def test_portfolio_risk(self, router):
         result = router.route(self._make_preprocess("PORTFOLIO_RISK"))
-        assert result == "RiskManager"
+        assert result == "risk-manager"
 
     def test_market_data_goes_to_all(self, router):
         result = router.route(self._make_preprocess("MARKET_DATA"))
@@ -94,12 +94,9 @@ class TestRouteTable:
         assert set(router.ROUTES.keys()) == expected_keys
 
     def test_all_route_values_are_valid_agents(self, router):
-        valid_agents = {
-            "ALL",
-            "Morefit",
-            "TECHNICAL_NERD",
-            "SentimentAnalyzer",
-            "RiskManager",
-        }
+        """ROUTES 的值必须是注册表里的 agent 或者 ALL。"""
+        from LLM.registry import all_agents
+
+        valid_agents = set(all_agents().keys()) | {"ALL"}
         for agent in router.ROUTES.values():
             assert agent in valid_agents, f"Unknown agent in ROUTES: {agent}"

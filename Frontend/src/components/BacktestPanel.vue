@@ -91,66 +91,6 @@ const buildChartDataFromBacktest = () => {
   return data;
 };
 
-// 从审计文件加载图表数据（用于普通回测）
-const loadChartDataFromAudit = async () => {
-  try {
-    console.log('[Chart] 从审计文件加载图表数据');
-    const res = await fetch(`${API_BASE}/api/v1/backtest-chart?symbol=${config.symbol}`);
-    const data = await res.json();
-    
-    if (data.success) {
-      console.log('[Chart] 图表数据加载成功:', data.data?.candles?.length, '根K线');
-      chartData.value = data.data;
-    } else {
-      console.error('[Chart] 加载图表数据失败:', data.error);
-    }
-  } catch (err) {
-    console.error('[Chart] 加载图表数据错误:', err);
-  }
-};
-
-// 执行普通回测
-const runBacktest = async () => {
-  console.log('[Backtest] 点击运行回测按钮');
-  loading.value = true;
-  error.value = '';
-  result.value = null;
-  dailyUpdates.value = [];
-  tradeSignals.value = [];
-  chartData.value = null;
-  
-  try {
-    console.log('[Backtest] 发送请求到:', `${API_BASE}/api/v1/backtest`);
-    const res = await fetch(`${API_BASE}/api/v1/backtest`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...config,
-        end: config.end || undefined,
-      }),
-    });
-    
-    const data = await res.json();
-    
-    if (data.success) {
-      result.value = data.result;
-      console.log('[Backtest] 回测成功，准备获取图表数据');
-      // 普通回测完成后，从审计文件获取图表数据
-      await loadChartDataFromAudit();
-    } else {
-      error.value = data.error || '回测执行失败';
-    }
-  } catch (err: any) {
-    console.error('[Backtest] 回测错误:', err);
-    error.value = '网络错误: ' + err.message;
-  } finally {
-    if (!streaming.value) {
-      loading.value = false;
-    }
-  }
-};
-
-// 执行流式回测
 const runStreamingBacktest = async (retryCount = 0) => {
   console.log('[Backtest] 点击流式回测按钮, 重试次数:', retryCount);
   if (retryCount === 0) {
@@ -465,7 +405,7 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 <template>
   <div class="backtest-panel">
     <div class="panel-header">
-      <h2 class="panel-title">📊 策略回测</h2>
+      <h2 class="panel-title">策略回测</h2>
       <p class="panel-desc">基于历史数据验证双 Agent 投票策略的有效性</p>
     </div>
     
@@ -608,8 +548,8 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
             @click="() => runStreamingBacktest()"
             :disabled="loading"
           >
-            <span v-if="streaming">⏳ 实时流式回测中...</span>
-            <span v-else>🚀 运行回测</span>
+            <span v-if="streaming">实时流式回测中…</span>
+            <span v-else>运行回测</span>
           </button>
           
           <!-- 取消按钮 - 只在回测进行中显示 -->
@@ -618,12 +558,12 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
             class="btn btn-cancel" 
             @click="cancelBacktest"
           >
-            ⛔ 取消回测
+            取消回测
           </button>
         </div>
         
         <div v-if="error" class="error-message">
-          ❌ {{ error }}
+          {{ error }}
         </div>
       </div>
       
@@ -757,12 +697,12 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 .panel-title {
   font-size: 1.5rem;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.9);
+  color: rgba(255,255,255,0.9);
   margin-bottom: 0.5rem;
 }
 
 .panel-desc {
-  color: rgba(0, 0, 0, 0.5);
+  color: rgba(255,255,255,0.5);
   font-size: 0.875rem;
 }
 
@@ -773,8 +713,8 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 }
 
 .config-section {
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(11,11,12,0.92);
+  border: 1px solid rgba(255,255,255,0.06);
   border-radius: 1rem;
   padding: 1.25rem;
 }
@@ -782,7 +722,7 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 .section-title {
   font-size: 1rem;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.85);
+  color: rgba(255,255,255,0.85);
   margin-bottom: 1rem;
 }
 
@@ -792,33 +732,33 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
   gap: 0.75rem;
   margin-bottom: 1rem;
   padding-bottom: 1rem;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+  border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
 .quick-label {
   font-size: 0.8125rem;
-  color: rgba(0, 0, 0, 0.5);
+  color: rgba(255,255,255,0.5);
 }
 
 .quick-btn {
   padding: 0.375rem 0.75rem;
-  background: rgba(139, 92, 246, 0.08);
-  border: 1px solid rgba(139, 92, 246, 0.2);
+  background: rgba(245,165,36,0.08);
+  border: 1px solid rgba(245,165,36,0.2);
   border-radius: 0.5rem;
-  color: #7c3aed;
+  color: #f5a524;
   font-size: 0.8125rem;
   cursor: pointer;
   transition: all 0.2s;
 }
 
 .quick-btn:hover {
-  background: rgba(139, 92, 246, 0.25);
+  background: rgba(245,165,36,0.25);
 }
 
 .quick-btn.reset {
-  background: rgba(0, 0, 0, 0.03);
-  border-color: rgba(0, 0, 0, 0.1);
-  color: rgba(0, 0, 0, 0.55);
+  background: rgba(255,255,255,0.03);
+  border-color: rgba(255,255,255,0.1);
+  color: rgba(255,255,255,0.55);
 }
 
 .form-grid {
@@ -836,28 +776,28 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 
 .form-group label {
   font-size: 0.8125rem;
-  color: rgba(0, 0, 0, 0.6);
+  color: rgba(255,255,255,0.6);
 }
 
 .form-input {
   padding: 0.625rem 0.875rem;
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(11,11,12,0.92);
+  border: 1px solid rgba(255,255,255,0.1);
   border-radius: 0.5rem;
-  color: rgba(0, 0, 0, 0.85);
+  color: rgba(255,255,255,0.85);
   font-size: 0.875rem;
   outline: none;
   transition: all 0.2s;
 }
 
 .form-input:focus {
-  border-color: rgba(139, 92, 246, 0.5);
+  border-color: rgba(245,165,36,0.5);
 }
 
 .form-range {
   -webkit-appearance: none;
   height: 4px;
-  background: rgba(0, 0, 0, 0.08);
+  background: rgba(255,255,255,0.08);
   border-radius: 2px;
   outline: none;
 }
@@ -866,7 +806,7 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
   -webkit-appearance: none;
   width: 16px;
   height: 16px;
-  background: #a78bfa;
+  background: #fbbf24;
   border-radius: 50%;
   cursor: pointer;
 }
@@ -893,28 +833,28 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-  color: white;
+  background: linear-gradient(135deg, #f5a524 0%, #f5a524 100%);
+  color: #0a0a0a;
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+  box-shadow: 0 4px 12px rgba(245,165,36,0.3);
 }
 
 .btn-secondary {
-  background: rgba(0, 0, 0, 0.05);
-  color: rgba(0, 0, 0, 0.8);
-  border: 1px solid rgba(0, 0, 0, 0.1);
+  background: rgba(255,255,255,0.05);
+  color: rgba(255,255,255,0.8);
+  border: 1px solid rgba(255,255,255,0.1);
 }
 
 .btn-secondary:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.08);
+  background: rgba(255,255,255,0.08);
 }
 
 .btn-cancel {
   background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  color: #ff4d4f;
   border: 1px solid rgba(239, 68, 68, 0.3);
   animation: pulse 2s infinite;
 }
@@ -931,8 +871,8 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 .streaming-progress {
   margin-bottom: 1rem;
   padding: 0.875rem 1rem;
-  background: rgba(139, 92, 246, 0.06);
-  border: 1px solid rgba(139, 92, 246, 0.2);
+  background: rgba(245,165,36,0.06);
+  border: 1px solid rgba(245,165,36,0.2);
   border-radius: 0.75rem;
 }
 
@@ -944,24 +884,24 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 }
 
 .progress-text {
-  color: #7c3aed;
+  color: #f5a524;
   font-weight: 500;
 }
 
 .progress-value {
-  color: rgba(0, 0, 0, 0.65);
+  color: rgba(255,255,255,0.65);
 }
 
 .progress-bar {
   height: 6px;
-  background: rgba(0, 0, 0, 0.08);
+  background: rgba(255,255,255,0.08);
   border-radius: 3px;
   overflow: hidden;
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #8b5cf6, #c4b5fd);
+  background: linear-gradient(90deg, #f5a524, #fcd34d);
   border-radius: 3px;
   transition: width 0.3s ease;
 }
@@ -972,13 +912,13 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
   background: rgba(239, 68, 68, 0.06);
   border: 1px solid rgba(239, 68, 68, 0.2);
   border-radius: 0.5rem;
-  color: #dc2626;
+  color: #ff4d4f;
   font-size: 0.875rem;
 }
 
 .results-section {
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(11,11,12,0.92);
+  border: 1px solid rgba(255,255,255,0.06);
   border-radius: 1rem;
   padding: 1.25rem;
 }
@@ -991,28 +931,28 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 }
 
 .summary-card {
-  background: rgba(0, 0, 0, 0.02);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
   border-radius: 0.75rem;
   padding: 1rem;
   text-align: center;
 }
 
 .summary-card.profit {
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.08) 0%, rgba(124, 58, 237, 0.05) 100%);
-  border-color: rgba(139, 92, 246, 0.2);
+  background: linear-gradient(135deg, rgba(245,165,36,0.08) 0%, rgba(245,165,36,0.05) 100%);
+  border-color: rgba(245,165,36,0.2);
 }
 
 .card-label {
   font-size: 0.75rem;
-  color: rgba(0, 0, 0, 0.5);
+  color: rgba(255,255,255,0.5);
   margin-bottom: 0.5rem;
 }
 
 .card-value {
   font-size: 1.5rem;
   font-weight: 600;
-  color: rgba(0, 0, 0, 0.9);
+  color: rgba(255,255,255,0.9);
 }
 
 .card-value.positive {
@@ -1025,13 +965,13 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 
 .card-sub {
   font-size: 0.75rem;
-  color: rgba(0, 0, 0, 0.45);
+  color: rgba(255,255,255,0.45);
   margin-top: 0.25rem;
 }
 
 .signal-card {
-  background: rgba(0, 0, 0, 0.02);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
   border-radius: 0.75rem;
   padding: 1rem;
   margin-bottom: 1.25rem;
@@ -1039,7 +979,7 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 
 .signal-header {
   font-size: 0.8125rem;
-  color: rgba(0, 0, 0, 0.5);
+  color: rgba(255,255,255,0.5);
   margin-bottom: 0.625rem;
 }
 
@@ -1077,7 +1017,7 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 .signal-confidence,
 .signal-position {
   font-size: 0.875rem;
-  color: rgba(0, 0, 0, 0.65);
+  color: rgba(255,255,255,0.65);
 }
 
 .equity-curve {
@@ -1086,14 +1026,14 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 
 .curve-title {
   font-size: 0.875rem;
-  color: rgba(0, 0, 0, 0.6);
+  color: rgba(255,255,255,0.6);
   margin-bottom: 0.75rem;
 }
 
 .curve-chart {
   height: 120px;
-  background: rgba(0, 0, 0, 0.02);
-  border: 1px solid rgba(0, 0, 0, 0.05);
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
   border-radius: 0.75rem;
   padding: 1rem;
   position: relative;
@@ -1102,22 +1042,22 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
 .curve-line {
   position: relative;
   height: 80px;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 
 .curve-point {
   position: absolute;
   width: 6px;
   height: 6px;
-  background: #a78bfa;
+  background: #fbbf24;
   border-radius: 50%;
   transform: translate(-50%, 50%);
   cursor: pointer;
 }
 
 .curve-point:hover {
-  background: #c4b5fd;
-  box-shadow: 0 0 8px rgba(167, 139, 250, 0.5);
+  background: #fcd34d;
+  box-shadow: 0 0 8px rgba(245,165,36,0.5);
 }
 
 .curve-labels {
@@ -1125,12 +1065,12 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
   justify-content: space-between;
   margin-top: 0.5rem;
   font-size: 0.6875rem;
-  color: rgba(0, 0, 0, 0.4);
+  color: rgba(255,255,255,0.4);
 }
 
 .updates-section {
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(11,11,12,0.92);
+  border: 1px solid rgba(255,255,255,0.06);
   border-radius: 1rem;
   padding: 1.25rem;
 }
@@ -1148,19 +1088,19 @@ const applyQuickConfig = (cfg: typeof quickConfigs[0]) => {
   grid-template-columns: 100px 80px 100px 80px;
   gap: 1rem;
   padding: 0.625rem 0.875rem;
-  background: rgba(0, 0, 0, 0.02);
+  background: rgba(255,255,255,0.02);
   border-radius: 0.5rem;
   align-items: center;
   font-size: 0.8125rem;
 }
 
 .update-date {
-  color: rgba(0, 0, 0, 0.55);
+  color: rgba(255,255,255,0.55);
 }
 
 .update-price,
 .update-value {
-  color: rgba(0, 0, 0, 0.75);
+  color: rgba(255,255,255,0.75);
 }
 
 .update-signal {

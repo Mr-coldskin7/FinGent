@@ -3,12 +3,61 @@ from langchain.agents import create_agent
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, BaseMessage
 from dotenv import load_dotenv
-from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
 from dataclasses import dataclass
 from typing import Optional, Dict, Any, List, Iterator
 import os
 import uuid
 import asyncio
+
+# deepagents（create_deep_agent + skills），缺失时回退到 create_agent
+try:
+    from deepagents import create_deep_agent
+    from langchain.agents.middleware.types import AgentMiddleware
+except ImportError:
+    create_deep_agent = None
+    AgentMiddleware = None
+
+# deepagents 内置 FilesystemMiddleware/TodoListMiddleware/SubAgentMiddleware 会附带
+# 一批文件系统/待办/子代理工具，对纯金融 agent 是多余工具面（也会干扰模型选工具）。
+# create_deep_agent 无关闭开关（middleware 参数只能追加），故用公开扩展点
+# AgentMiddleware.wrap_model_call + ModelRequest.override 在模型请求层过滤。
+# 必须保留 read_file：技能是渐进式披露，agent 靠 read_file 读 SKILL.md。
+_UNWANTED_DEEPAGENT_TOOLS = frozenset(
+    {"ls", "write_file", "edit_file", "glob", "grep", "execute", "write_todos", "task"}
+)
+
+
+def _trim_tool_surface(request):
+    """剔除 deepagents 附带的多余工具，只保留 read_file 与业务工具。"""
+    tools = getattr(request, "tools", None)
+    if not tools:
+        return request
+    kept = [
+        t for t in tools if getattr(t, "name", None) not in _UNWANTED_DEEPAGENT_TOOLS
+    ]
+    return request if len(kept) == len(tools) else request.override(tools=kept)
+
+
+if AgentMiddleware is not None:
+
+    class _ToolSurfaceMiddleware(AgentMiddleware):
+        """只保留 read_file/业务工具，去掉 deepagents 的 8 个多余工具。"""
+
+        def wrap_model_call(self, request, handler):  # sync 路径
+            return handler(_trim_tool_surface(request))
+
+        async def awrap_model_call(self, request, handler):  # async 路径（图实际走这里）
+            return await handler(_trim_tool_surface(request))
+
+# 技能目录：LLM/skills/<skill_name>/SKILL.md
+SKILLS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills")
+SKILLS_SOURCE = "/skills/fingent/"
+
+# MySQL checkpointer 仅用于 __main__ demo，惰性导入（默认环境不安装 mysql 依赖）
+try:
+    from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
+except ImportError:
+    PyMySQLSaver = None
 
 try:
     import LLM.tools as tools
@@ -101,11 +150,12 @@ class Agent:
         self,
         model,
         tools,
-        system_prompt: str,
+        system_prompt: str = "",
         checkpointer=None,
         simulated_date: Optional[str] = None,
         memory_manager=None,
         user_id: Optional[str] = None,
+        skill_name: Optional[str] = None,
     ):
         self.checkpointer = checkpointer
         self.thread_id = str(uuid.uuid4())
@@ -113,6 +163,7 @@ class Agent:
         self.tools = tools
         self.memory_manager = memory_manager
         self.user_id = user_id or "anonymous"
+        self.skill_name = skill_name
 
         # 支持回测时的日期模拟（环境变量优先级最高，用于回测）
         effective_date = (
@@ -121,12 +172,53 @@ class Agent:
         self.reminder = f"""### ⚠️ TODAY IS {effective_date} (YYYY-MM-DD).
 NEVER GUESS DATES. You are also a professional financial assistant."""
 
-        self.agent = create_agent(
-            model=model,
-            tools=tools,
-            system_prompt=self.reminder + system_prompt,
-            checkpointer=self.checkpointer,
-        )
+        if skill_name and create_deep_agent is not None:
+            # ═══ deepagents 模式：身份/协议/输出格式在技能文件里，prompt 与 tools 分离 ═══
+            self._skill_files = self._load_skill(skill_name)
+            skill_path = f"{SKILLS_SOURCE}{skill_name}/SKILL.md"
+            skill_system_prompt = (
+                self.reminder
+                + f"\n\nYou are the **{skill_name}** agent of FinGent.\n"
+                f"Your full identity, analysis protocol, and required JSON output "
+                f"schema live in your skill file:\n\n`{skill_path}`\n\n"
+                f"### MANDATORY\nRead your skill file **first** (use the `read_file` "
+                f"tool with that path) before answering. Your final answer MUST be "
+                f"valid JSON matching the schema defined in the skill."
+            )
+            self.agent = create_deep_agent(
+                model=model,
+                tools=tools,
+                system_prompt=skill_system_prompt,
+                skills=[SKILLS_SOURCE],
+                checkpointer=self.checkpointer,
+                middleware=[_ToolSurfaceMiddleware()] if AgentMiddleware is not None else [],
+            )
+        else:
+            # ═══ 传统模式：system_prompt 直接注入（无技能文件时回退）═══════
+            self._skill_files = {}
+            self.agent = create_agent(
+                model=model,
+                tools=tools,
+                system_prompt=self.reminder + (system_prompt or ""),
+                checkpointer=self.checkpointer,
+            )
+
+    def _load_skill(self, skill_name: str) -> Dict[str, Dict[str, Any]]:
+        """读取 LLM/skills/<skill_name>/SKILL.md → StateBackend files 字典。
+
+        deepagents 默认 StateBackend 下，技能文件通过 invoke(files=...) 注入到
+        进程内虚拟文件系统（不碰真实磁盘文件）。agent 用 read_file 读取。
+        """
+        skill_path = os.path.join(SKILLS_DIR, skill_name, "SKILL.md")
+        if not os.path.exists(skill_path):
+            print(f"⚠️ Skill file not found: {skill_path}")
+            return {}
+        with open(skill_path, encoding="utf-8") as f:
+            content = f.read()
+        # StateBackend 的 files 状态要求 FileData 结构（content 为行列表 + 时间戳）
+        from deepagents.backends.utils import create_file_data
+
+        return {f"{SKILLS_SOURCE}{skill_name}/SKILL.md": create_file_data(content)}
 
     def _get_config(self, thread_id: Optional[str] = None) -> dict:
         tid = thread_id or self.thread_id
@@ -243,9 +335,13 @@ NEVER GUESS DATES. You are also a professional financial assistant."""
         max_retries = 3
         base_delay = 1.0  # 基础延迟1秒
 
+        invoke_input: Dict[str, Any] = {"messages": [new_message]}
+        if self._skill_files:
+            invoke_input["files"] = self._skill_files  # deepagents skills (StateBackend)
+
         for attempt in range(max_retries):
             try:
-                response = self.agent.invoke({"messages": [new_message]}, config=config)
+                response = self.agent.invoke(invoke_input, config=config)
                 return self._build_response(response["messages"], self.thread_id)
             except Exception as e:
                 if attempt < max_retries - 1:
@@ -294,11 +390,13 @@ NEVER GUESS DATES. You are also a professional financial assistant."""
         max_retries = 3
         base_delay = 1.0  # 基础延迟1秒
 
+        invoke_input: Dict[str, Any] = {"messages": [new_message]}
+        if self._skill_files:
+            invoke_input["files"] = self._skill_files  # deepagents skills (StateBackend)
+
         for attempt in range(max_retries):
             try:
-                response = await self.agent.ainvoke(
-                    {"messages": [new_message]}, config=config
-                )
+                response = await self.agent.ainvoke(invoke_input, config=config)
                 return self._build_response(response["messages"], self.thread_id)
             except Exception as e:
                 if attempt < max_retries - 1:

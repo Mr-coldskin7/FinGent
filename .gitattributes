@@ -1,5 +1,6 @@
-*.json binary
-*.md binary
+# lockfile 噪声单独屏蔽，不殃及普通 json / md
+Frontend/package-lock.json -diff
+uv.lock -diff
 *.model binary
 *.safetensors filter=lfs diff=lfs merge=lfs -text
 RAG/models/qwen3-embedding/*.safetensors filter=lfs diff=lfs merge=lfs -text

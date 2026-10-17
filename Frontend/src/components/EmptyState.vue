@@ -5,10 +5,10 @@ const emit = defineEmits<{
 }>();
 
 const suggestions = [
-  { icon: '📊', text: '贵州茅台', prompt: '分析一下茅台' },
-  { icon: '🚀', text: '英伟达走势', prompt: 'NVDA最近怎么样' },
-  { icon: '💎', text: '价值投资', prompt: '推荐几只价值股' },
-  { icon: '🔥', text: '热点板块', prompt: '科技股还能买吗' },
+  { icon: '', text: '贵州茅台', prompt: '分析一下茅台' },
+  { icon: '', text: '英伟达走势', prompt: 'NVDA最近怎么样' },
+  { icon: '', text: '价值投资', prompt: '推荐几只价值股' },
+  { icon: '', text: '热点板块', prompt: '科技股还能买吗' },
 ];
 
 const handleClick = (prompt: string) => {
@@ -20,10 +20,7 @@ const handleClick = (prompt: string) => {
 <template>
   <div class="empty-state">
     <div class="welcome">
-      <div class="logo-container">
-        <span class="welcome-icon">🤖</span>
-        <div class="pulse-ring"></div>
-      </div>
+      <div class="welcome-rule"></div>
       <h1>我是 FinGent</h1>
       <p class="subtitle">你的智能股票分析助手</p>
       <p class="description">基于 AI 技术，为你提供专业、易懂的股票分析与投资建议</p>
@@ -35,7 +32,7 @@ const handleClick = (prompt: string) => {
         class="suggestion-card"
         @click="handleClick(item.prompt)"
       >
-        <span class="icon">{{ item.icon }}</span>
+        <span v-if="item.icon" class="icon">{{ item.icon }}</span>
         <span class="text">{{ item.text }}</span>
         <svg class="arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M5 12h14M12 5l7 7-7 7"/>
@@ -66,12 +63,11 @@ const handleClick = (prompt: string) => {
   margin-bottom: 1.5rem;
 }
 
-.welcome-icon {
-  font-size: 4rem;
-  display: block;
-  position: relative;
-  z-index: 1;
-  animation: float 3s ease-in-out infinite;
+.welcome-rule {
+  width: 2.5rem;
+  height: 2px;
+  margin: 0 auto 1.25rem;
+  background: #f5a524;
 }
 
 .pulse-ring {
@@ -105,14 +101,13 @@ const handleClick = (prompt: string) => {
 .welcome h1 {
   font-size: 2.25rem;
   font-weight: 800;
-  color: #1e293b;
+  color: #e4e4e7;
   margin: 0 0 0.5rem 0;
-  background: linear-gradient(to right, #3b82f6, #059669, #3b82f6);
+  background: none;
   background-size: 200% auto;
   -webkit-background-clip: text;
   background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: gradient 3s linear infinite;
+  -webkit-text-fill-color: #f4f4f5;
 }
 
 @keyframes gradient {
@@ -122,13 +117,13 @@ const handleClick = (prompt: string) => {
 
 .subtitle {
   font-size: 1.125rem;
-  color: rgba(0, 0, 0, 0.55);
+  color: rgba(255,255,255,0.55);
   margin: 0 0 0.75rem 0;
   font-weight: 500;
 }
 
 .description {
-  color: rgba(0, 0, 0, 0.45);
+  color: rgba(255,255,255,0.45);
   font-size: 0.875rem;
   margin: 0;
   max-width: 360px;
@@ -148,15 +143,15 @@ const handleClick = (prompt: string) => {
   align-items: center;
   gap: 0.875rem;
   padding: 1rem 1.25rem;
-  background: rgba(255, 255, 255, 0.7);
-  border: 1px solid rgba(0, 0, 0, 0.06);
+  background: rgba(11,11,12,0.92);
+  border: 1px solid rgba(255,255,255,0.06);
   border-radius: 1rem;
   cursor: pointer;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .suggestion-card:hover {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(11,11,12,0.92);
   border-color: rgba(59, 130, 246, 0.35);
   transform: translateY(-3px);
   box-shadow: 0 20px 40px -15px rgba(59, 130, 246, 0.15);
@@ -168,7 +163,7 @@ const handleClick = (prompt: string) => {
 
 .suggestion-card .text {
   flex: 1;
-  color: rgba(0, 0, 0, 0.8);
+  color: rgba(255,255,255,0.8);
   font-size: 0.9375rem;
   font-weight: 500;
 }
@@ -176,7 +171,7 @@ const handleClick = (prompt: string) => {
 .suggestion-card .arrow {
   width: 1rem;
   height: 1rem;
-  color: rgba(0, 0, 0, 0.25);
+  color: rgba(255,255,255,0.25);
   transition: all 0.2s;
 }
 

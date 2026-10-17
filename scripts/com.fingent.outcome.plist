@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.fingent.outcome</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/lishanyi/Documents/projects/FinGent/scripts/run_outcome.sh</string>
+    </array>
+
+    <!-- 结果验证写入 L3 记忆库，只在本地跑；internet 不可达时由脚本日志记录失败即可 -->
+    <key>StartCalendarInterval</key>
+    <array>
+        <!-- 每个工作日收盘后 18:10 跑一次（A 股/美股数据均以当日收盘为最新） -->
+        <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>10</integer></dict>
+        <dict><key>Weekday</key><integer>2</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>10</integer></dict>
+        <dict><key>Weekday</key><integer>3</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>10</integer></dict>
+        <dict><key>Weekday</key><integer>4</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>10</integer></dict>
+        <dict><key>Weekday</key><integer>5</integer><key>Hour</key><integer>18</integer><key>Minute</key><integer>10</integer></dict>
+    </array>
+
+    <key>StandardOutPath</key>
+    <string>/Users/lishanyi/Documents/projects/FinGent/logs/outcome_launchd.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/lishanyi/Documents/projects/FinGent/logs/outcome_launchd.log</string>
+</dict>
+</plist>

@@ -14,6 +14,11 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+# 测试必须使用临时记忆库：api_server / graph 在导入时会创建全局 MemoryManager，
+# 不隔离的话测试数据会写进真实的 memory/l3_memory.db（历史上的测试污染来源）。
+_TEST_MEMORY_DIR = tempfile.mkdtemp(prefix="fingent_test_memory_")
+os.environ["FINGENT_MEMORY_DB"] = os.path.join(_TEST_MEMORY_DIR, "test_l3.db")
+
 # ── Mock unavailable imports ─────────────────────────────────────────
 # 1. langchain.agents.create_agent doesn't exist in the installed version.
 if "langchain.agents" in sys.modules:
@@ -62,3 +67,16 @@ def router():
     from LLM.router import Router
 
     return Router()
+
+
+@pytest.fixture(autouse=True)
+def _restore_event_loop():
+    """asyncio.run() 结束后会把当前事件循环置空；这里在每个测试后恢复，
+    避免后续用 asyncio.get_event_loop() 的测试（如 test_memory.py）被串扰。"""
+    import asyncio
+
+    yield
+    try:
+        asyncio.get_event_loop()
+    except RuntimeError:
+        asyncio.set_event_loop(asyncio.new_event_loop())
