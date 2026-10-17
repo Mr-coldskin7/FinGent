@@ -168,7 +168,7 @@ def test_recent_analysis_not_yet_due_is_not_checked(tmp_path):
 def test_objective_weight_requires_min_samples(tmp_path):
     db = str(tmp_path / "w.db")
     mm = MemoryManager(db_path=db)
-    rows = [(f"A", "BUY", "2026-01-01", "2026-01-31", 1, 1, 0, 0, 0.05, 1)]
+    rows = [("A", "BUY", "2026-01-01", "2026-01-31", 1, 1, 0, 0, 0.05, 1)]
     # 只有 5 个样本：不更新
     for i in range(5):
         asyncio.run(mm.save_outcome_rows(1000 + i, 20, rows, mark_verified=False))

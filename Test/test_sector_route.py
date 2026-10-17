@@ -2,7 +2,6 @@
 import asyncio
 from types import SimpleNamespace
 
-import pytest
 
 from Data import market_context
 from Eval.reliability import classify_route

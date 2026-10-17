@@ -4,8 +4,6 @@ Adapters - 数据转换层
 """
 
 from typing import List, Optional
-import sys
-import os
 
 import pandas as pd
 

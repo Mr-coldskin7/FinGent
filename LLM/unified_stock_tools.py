@@ -16,9 +16,9 @@ if project_root not in sys.path:
 
 from langchain.tools import tool
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import Optional
 
-from Data.service import InfoService, fetch_stock_data
+from Data.service import InfoService
 from Data.models import DataType
 
 try:

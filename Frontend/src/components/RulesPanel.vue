@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { API_BASE, apiFetch } from '../utils/api';
 /**
  * 规则管理：列出当前用户的纠正规则，可启用/禁用/删除。
  * 规则来自分析结果下的「纠正规则」反馈；启用的规则会注入对应 Agent 的提示词，禁用后不再注入。
@@ -7,10 +8,11 @@
 import { ref, computed, watch, onMounted } from 'vue';
 import { friendlyError } from '../utils/errors';
 import type { MemoryRule } from '../types';
+import { agentLabel as agentShortLabel } from '../utils/agents';
 
 const props = defineProps<{ userId: string }>();
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
 // 与后端 WEIGHT_RULE_PROMOTE_THRESHOLD 保持一致：触发次数达到该值视为强规则
 const STRONG_THRESHOLD = 3;
 
@@ -22,14 +24,6 @@ const busyId = ref<number | null>(null);
 const confirmId = ref<number | null>(null);
 const notice = ref('');
 
-const AGENT_LABEL: Record<string, string> = {
-  ALL: '全部 Agent',
-  'technical-nerd': '技术分析',
-  morefit: '估值分析',
-  'risk-manager': '风险管理',
-  'sentiment-analyzer': '舆情分析',
-  'tiktok-auntie': '涨停大姨（短线情绪）',
-};
 const SOURCE_LABEL: Record<string, string> = {
   explicit_feedback: '用户纠正',
   self_mined: '自动挖掘',
@@ -44,7 +38,7 @@ const visibleRules = computed(() => {
 });
 
 function agentLabel(name: string): string {
-  return AGENT_LABEL[name] || name;
+  return name === 'ALL' ? '全部 Agent' : agentShortLabel(name);
 }
 
 function formatTime(ts: string): string {
@@ -55,7 +49,7 @@ async function load() {
   loading.value = true;
   error.value = '';
   try {
-    const res = await fetch(
+    const res = await apiFetch(
       `${API_BASE}/api/v1/memory/rules?user_id=${encodeURIComponent(props.userId)}&include_inactive=true`,
     );
     const data = await res.json();
@@ -72,7 +66,7 @@ async function toggle(rule: MemoryRule) {
   busyId.value = rule.id;
   notice.value = '';
   try {
-    const res = await fetch(`${API_BASE}/api/v1/memory/rules/${rule.id}`, {
+    const res = await apiFetch(`${API_BASE}/api/v1/memory/rules/${rule.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: props.userId, active: !rule.active }),
@@ -92,7 +86,7 @@ async function remove(rule: MemoryRule) {
   busyId.value = rule.id;
   notice.value = '';
   try {
-    const res = await fetch(
+    const res = await apiFetch(
       `${API_BASE}/api/v1/memory/rules/${rule.id}?user_id=${encodeURIComponent(props.userId)}`,
       { method: 'DELETE' },
     );

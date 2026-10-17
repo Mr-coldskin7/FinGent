@@ -2,7 +2,6 @@
 Eval/reliability.py 的单元测试（全部使用假图，不消耗 LLM 配额）。
 """
 
-import asyncio
 import json
 from typing import Optional
 

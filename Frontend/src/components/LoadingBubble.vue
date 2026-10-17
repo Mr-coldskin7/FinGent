@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
+import { agentFullName } from '../utils/agents';
 
 interface AgentProgressItem {
   name: string;
@@ -64,13 +65,7 @@ const doneCount = computed(() => agents.value.filter(a => a.status !== 'running'
 const multiAgent = computed(() => agents.value.length > 1);
 const showAgents = computed(() => agents.value.length > 0);
 
-const prettyName = (name: string) =>
-  ({
-    'technical-nerd': '技术面分析师',
-    morefit: '基本面分析师',
-    'risk-manager': '风控分析师',
-    'sentiment-analyzer': '舆情分析师',
-  }[name] || name);
+const prettyName = agentFullName;
 </script>
 
 <template>

@@ -5,7 +5,6 @@ Shared test fixtures for FinGent test suite.
 import os
 import sys
 import pytest
-import sqlite3
 import tempfile
 from unittest.mock import MagicMock
 

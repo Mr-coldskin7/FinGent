@@ -5,13 +5,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-bocha_api_key = os.getenv("BO_CHA_API_KEY")
+bocha_api_key = os.getenv("BOCHA_API_KEY", "")  # 与 .env.example / config.py 的名字保持一致
 
 
 async def search(
     query: str, freshness: str = "noLimit", summary: bool = True, count: int = 5
 ) -> dict:
     """带完整参数的请求示例"""
+    if not bocha_api_key:
+        # 未配置 key 时直接报清晰错误，不发出 "Bearer " 之类的非法请求头
+        raise RuntimeError("未配置 BOCHA_API_KEY（见 .env），网络搜索已跳过")
     headers = {
         "Authorization": f"Bearer {bocha_api_key}",
         "Content-Type": "application/json",

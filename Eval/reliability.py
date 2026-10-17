@@ -223,7 +223,7 @@ def render_markdown(report: Dict[str, Any]) -> str:
             lines.append(f"- {k_}：{v}")
     else:
         lines.append("- 无")
-    lines += ["", f"明细与逐步事件见同目录 `trace.jsonl`。"]
+    lines += ["", "明细与逐步事件见同目录 `trace.jsonl`。"]
     return "\n".join(lines) + "\n"
 
 

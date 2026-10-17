@@ -1,5 +1,5 @@
-from typing import TypedDict, Any, Optional, List, Dict
-from langgraph.graph import StateGraph, START, END
+from typing import TypedDict, Any, Optional, Dict
+from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
 try:
@@ -11,30 +11,15 @@ except Exception:
 try:
     from LLM.preprocess import Preprocessor
     from LLM.router import Router
-    from LLM.agent import TECHNICAL_NERD, Morefit
-    from LLM.unified_stock_tools import (
-        get_stock_price,
-        get_stock_basic_info,
-        get_stock_company_info,
-        get_stock_financial_report_links,
-    )
 except ImportError:
     from preprocess import Preprocessor
     from router import Router
-    from agent import TECHNICAL_NERD, Morefit
-    from unified_stock_tools import (
-        get_stock_price,
-        get_stock_basic_info,
-        get_stock_company_info,
-        get_stock_financial_report_links,
-    )
 
 try:
     from Data.memory import get_memory_manager
 except ImportError:
     get_memory_manager = None
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, SystemMessage
-from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, SystemMessage
 import os
 from dotenv import load_dotenv
 import json
@@ -191,7 +176,7 @@ class FinGraph:
 
     async def _chat(self, state: GraphStatus) -> dict:
         """直接对话：用底层模型自然回复，不走 agent / 投票流程"""
-        print(f"\n┌─ [chat_node] 闲聊/通用问题直接回复")
+        print("\n┌─ [chat_node] 闲聊/通用问题直接回复")
         emit_progress({"stage": "chat"})
         user_input = state["input"]
 
@@ -220,7 +205,7 @@ class FinGraph:
             print(f"│  ⚠️ 闲聊回复失败: {e}")
             answer = "你好！我是 FinGent，可以帮你分析 A 股和美股。直接告诉我股票名称或代码就可以开始～"
 
-        print(f"└─ 直接回复完成")
+        print("└─ 直接回复完成")
         return {"result": answer, "status": "completed"}
 
     _SECTOR_TECH_RE = re.compile(
@@ -229,7 +214,7 @@ class FinGraph:
 
     async def _sector(self, state: GraphStatus) -> dict:
         """板块/市场层面问题（未指定个股）：基于实时背景给框架性回答，不强制解析个股。"""
-        print(f"\n┌─ [sector_node] 板块/市场问答（未指定个股）")
+        print("\n┌─ [sector_node] 板块/市场问答（未指定个股）")
         emit_progress({"stage": "sector"})
         user_input = state["input"]
 
@@ -267,7 +252,7 @@ class FinGraph:
             print(f"│  ⚠️ 板块回答失败: {e}")
             answer = self._sector_fallback_text(context_text)
 
-        print(f"└─ 板块回答完成")
+        print("└─ 板块回答完成")
         return {"result": answer, "status": "completed"}
 
     @staticmethod
@@ -282,7 +267,7 @@ class FinGraph:
     # 预处理节点
     # -------------------------------------------------------------------------
     async def _preprocess(self, state: GraphStatus) -> dict:
-        print(f"\n┌─ [preprocess] 预处理节点")
+        print("\n┌─ [preprocess] 预处理节点")
         emit_progress({"stage": "preprocess"})
         print(f"│  输入: '{state['input']}'")
         try:
@@ -350,7 +335,7 @@ class FinGraph:
     # 路由节点
     # -------------------------------------------------------------------------
     def _route(self, state: GraphStatus) -> dict:
-        print(f"\n┌─ [route] 路由节点")
+        print("\n┌─ [route] 路由节点")
         parse_result = state["parse_result"] or {}
         print(f"│  parse_result: {parse_result}")
 
@@ -358,7 +343,7 @@ class FinGraph:
 
         # 0. 闲聊/通用问题 → 直接对话（最优先，避免普通聊天被强行拉去分析/澄清）
         if intent_type == "CHAT" or self._is_casual_chat(state["input"]):
-            print(f"└─ 路由到: -> chat_node (直接回复)")
+            print("└─ 路由到: -> chat_node (直接回复)")
             info = self._make_route_info(
                 "chat", [], "闲聊/通用问题，直接对话，不进入分析流程", "chat"
             )
@@ -366,7 +351,7 @@ class FinGraph:
 
         # 1. 需要澄清
         if parse_result.get("status") == "clarification_needed":
-            print(f"└─ 路由到: -> clarify_node")
+            print("└─ 路由到: -> clarify_node")
             clarify = parse_result.get("clarification") or {}
             reason = clarify.get("message") or "信息不足，需要用户澄清"
             info = self._make_route_info("clarify", [], reason, "clarify")
@@ -385,8 +370,8 @@ class FinGraph:
         if not codes and not symbols and not names:
             # 没有个股实体不是死胡同：板块/市场问题直接给框架性回答（可带实时背景），
             # 个股分析需要时再引导用户给出名称或代码。
-            print(f"│  未识别到公司实体 -> 板块/通用回答（不强制个股）")
-            print(f"└─ 路由到: -> sector_node")
+            print("│  未识别到公司实体 -> 板块/通用回答（不强制个股）")
+            print("└─ 路由到: -> sector_node")
             info = self._make_route_info(
                 "sector", [], "未指定具体股票，按板块/市场问题直接回答", "sector"
             )
@@ -547,7 +532,7 @@ class FinGraph:
         else:
             result_text = result.get("reason", "") or result.get("raw_output", "")
 
-        print(f"│  ✓ Agent 分析完成")
+        print("│  ✓ Agent 分析完成")
         return {
             "result": result_text,
             "status": "completed",
@@ -776,7 +761,7 @@ class FinGraph:
     # 多 Agent 并行模式（ALL）— 从注册表遍历，不再硬编码
     # -------------------------------------------------------------------------
     async def _run_all_agents(self, state: GraphStatus) -> dict:
-        print(f"\n┌─ [ALL] 多Agent投票模式")
+        print("\n┌─ [ALL] 多Agent投票模式")
 
         stock = self._extract_stock(state)
 
@@ -786,7 +771,7 @@ class FinGraph:
             n for n in _registry_all_agents() if n in self.agent
         ]
         if not agent_names:
-            print(f"│  警告: 没有可用的 Agent")
+            print("│  警告: 没有可用的 Agent")
             return {"agent_results": {}, "stock": stock, "status": "voting_ready"}
 
         tasks = [
@@ -823,7 +808,7 @@ class FinGraph:
 
         for name, r in agent_results.items():
             print(f"│  ✅ {name} 分析完成 -> {r.get('vote', 'HOLD')}")
-        print(f"\n│  ✅ 多Agent分析完成，进入投票阶段...")
+        print("\n│  ✅ 多Agent分析完成，进入投票阶段...")
 
         return {
             "agent_results": agent_results,
@@ -835,12 +820,12 @@ class FinGraph:
     # 通用投票汇总 — 遍历 agent_results，支持动态权重
     # -------------------------------------------------------------------------
     async def _voting(self, state: GraphStatus) -> dict:
-        print(f"\n┌─ [VOTING] 投票汇总")
+        print("\n┌─ [VOTING] 投票汇总")
         emit_progress({"stage": "voting"})
 
         agent_results = state.get("agent_results") or {}
         if not agent_results:
-            print(f"│  无分析结果")
+            print("│  无分析结果")
             return {"result": "无分析结果", "status": "completed"}
 
         # 取第一个结果的 symbol 作为默认
@@ -1007,7 +992,7 @@ class FinGraph:
     # 澄清节点
     # -------------------------------------------------------------------------
     def _clarify(self, state: GraphStatus) -> dict:
-        print(f"\n┌─ [clarify_node] 需要澄清")
+        print("\n┌─ [clarify_node] 需要澄清")
         emit_progress({"stage": "clarify"})
         clarification_question = state.get("parse_result", {}).get(
             "clarification",
@@ -1016,7 +1001,7 @@ class FinGraph:
         count = state.get("clarification_count", 0) + 1
         print(f"│  澄清问题: {clarification_question}")
         print(f"│  澄清次数: {count}/3")
-        print(f"└─ 中断: 请用户回复后，用 resume() 继续")
+        print("└─ 中断: 请用户回复后，用 resume() 继续")
         return {
             "result": clarification_question,
             "status": "waiting_for_clarification",
@@ -1084,7 +1069,7 @@ class FinGraph:
         }
 
         try:
-            async for event in self.graph.astream(initial_state, config=config):
+            async for _event in self.graph.astream(initial_state, config=config):
                 pass
         except Exception as e:
             # 顶层兜底：图执行任何异常都转换为结构化错误返回，不向上抛出（不会让 API 500）
@@ -1106,7 +1091,7 @@ class FinGraph:
         final_values = dict(final.values) if final else {}
 
         if final_values.get("status") == "waiting_for_clarification":
-            print(f"\n⏸️ 等待用户澄清...")
+            print("\n⏸️ 等待用户澄清...")
             return final_values
 
         # Passive + Active Self-Improve: record analysis & check consistency
@@ -1162,7 +1147,7 @@ class FinGraph:
                 print(f"│  ⚠️ L3 record failed: {e}")
 
         print(f"\n{'='*60}")
-        print(f"✅ Graph 运行完成")
+        print("✅ Graph 运行完成")
         print(f"{'='*60}")
         return final_values
 
@@ -1263,7 +1248,7 @@ def test_normal_flow():
     for user_input, thread_id in test_cases:
         print("\n" + "=" * 60)
         result = asyncio.run(fin_graph.run(user_input, thread_id))
-        print(f"\n📋 最终结果:")
+        print("\n📋 最终结果:")
         print(f"   status: {result.get('status')}")
         r = result.get("result")
         print(f"   result: {r[:50]}..." if r and len(r) > 50 else f"   result: {r}")
@@ -1285,10 +1270,34 @@ def test_all_agents_flow():
     print("-" * 60)
     result = asyncio.run(fin_graph.run("给我投资建议", thread_id))
 
-    print(f"\n📋 最终结果:")
+    print("\n📋 最终结果:")
     print(f"   status: {result.get('status')}")
     r = result.get("result")
     print(f"   result: {r[:80]}..." if r and len(r) > 80 else f"   result: {r}")
+
+
+def assemble_fin_graph(
+    llm,
+    checkpointer,
+    memory_manager=None,
+    agent_names=None,
+) -> FinGraph:
+    """统一组装 FinGraph（main.py / api_server.py / 回测共用，避免各处各写一遍）。
+
+    agent_names 缺省时装配注册表中的全部 agent（新增 DIY agent = 丢 LLM/skills/<name>/SKILL.md 即自动参与投票）；
+    回测等场景可传入子集。
+    """
+    from LLM.registry import instantiate
+
+    names = list(agent_names) if agent_names is not None else _registry_all_agents()
+    agents = {name: instantiate(name, llm, checkpointer, memory_manager) for name in names}
+    return FinGraph(
+        preprocessor=Preprocessor(llm, checkpointer),
+        router=Router(),
+        agent=agents,
+        checkpointer=checkpointer,
+        memory_manager=memory_manager,
+    )
 
 
 if __name__ == "__main__":

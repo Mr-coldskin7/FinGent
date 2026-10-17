@@ -8,7 +8,7 @@ import json
 import sys
 import os
 import re
-from typing import List, Optional
+from typing import List
 
 # 添加项目根目录到 Python 路径（确保能导入 Data 模块）
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

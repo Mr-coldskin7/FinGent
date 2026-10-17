@@ -56,3 +56,13 @@ package = false                     # 项目不可安装为包，仅管理环境
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["Test"]
+
+[tool.ruff]
+# 代码质量基线：只强制"真问题"类规则（语法/未定义/未使用/明显缺陷），风格类不做硬性要求。
+extend-exclude = ["RAG/models", "Frontend", "Eval/runs"]
+
+[tool.ruff.lint]
+select = ["E9", "F", "B"]
+ignore = [
+    "B905",  # zip() 无 strict：项目内数据长度已受控，不强制
+]

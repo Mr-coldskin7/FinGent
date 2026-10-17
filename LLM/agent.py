@@ -2,7 +2,7 @@
 # I will build two main agents
 # ===========================================================================================================
 #
-# First agent: TECHNICAL_NERD
+# First agent: TechnicalNerd
 # This agent possesses reverse-thinking capabilities and primarily focuses on the strategic interplay between
 # institutional players (market manipulators) and retail investors as reflected in technical indicators.
 # He has a clear understanding of the following principles:
@@ -32,12 +32,6 @@ try:
     import LLM.base as base
 except ImportError:
     import base as base
-from datetime import datetime
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage
-from dotenv import load_dotenv
-import os
-from langchain.tools import tool
 
 # ────────────────────────────────────────────────────────────────────────
 # 每个 Agent 的输出 JSON schema 已随 system_prompt 一起迁移至技能文件:
@@ -48,7 +42,7 @@ from langchain.tools import tool
 # ────────────────────────────────────────────────────────────────────────
 
 
-class TECHNICAL_NERD(base.Agent):
+class TechnicalNerd(base.Agent):
     def format_prompt(self, stock: str, user_input: str) -> str:
         return f"请分析股票 {stock} 的技术面情况。用户原始问题：{user_input}"
 

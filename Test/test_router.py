@@ -2,8 +2,6 @@
 Tests for LLM/router.py — Router (pure logic, no external deps).
 """
 
-import pytest
-from LLM.router import Router
 
 
 class TestRouterRoute:

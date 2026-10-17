@@ -3,9 +3,7 @@ Tests for Data/cache.py — CacheManager.
 """
 
 import time
-import pytest
 from unittest.mock import patch
-from Data.cache import CacheManager
 from Data.models import DataType, UnifiedStockData
 
 

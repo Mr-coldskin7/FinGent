@@ -8,7 +8,6 @@ FinGent - AI股票分析助手
     python main.py "分析茅台走势"     # 单次查询模式
 """
 
-import os
 import sys
 import asyncio
 import argparse
@@ -24,12 +23,7 @@ from config import get_settings
 settings = get_settings()
 
 # 导入LLM模块
-from langchain_openai import ChatOpenAI
-
-# 导入FinGent组件
-from LLM.preprocess import Preprocessor
-from LLM.router import Router
-from LLM.graph import FinGraph
+from LLM.graph import FinGraph, assemble_fin_graph
 from LLM.checkpointer import get_checkpointer
 from LLM.llm import create_chat_model
 from Data.memory import get_memory_manager
@@ -68,33 +62,11 @@ def create_fin_graph(temperature: float = 0.5):
     Returns:
         FinGraph: 配置好的图实例
     """
-    # 初始化组件 - checkpointer 可插拔：FINGENT_CHECKPOINTER=memory(默认)|redis
+    # checkpointer 可插拔：FINGENT_CHECKPOINTER=memory(默认)|redis
     global _cleanup_ckpt
     checkpointer, _cleanup_ckpt = get_checkpointer()
     model = get_model(temperature=temperature)
-    memory_manager = get_memory_manager()
-
-    preprocessor = Preprocessor(model, checkpointer)
-    router = Router()
-
-    # 创建Agent实例 — 全部由注册表装配（新增 DIY agent = 丢 skills 目录即自动参与）
-    from LLM.registry import all_agents as _registry_all_agents, instantiate as _instantiate
-
-    agents = {
-        name: _instantiate(name, model, checkpointer, memory_manager)
-        for name in _registry_all_agents()
-    }
-
-    # 构建图
-    fin_graph = FinGraph(
-        preprocessor=preprocessor,
-        router=router,
-        agent=agents,
-        checkpointer=checkpointer,
-        memory_manager=memory_manager,
-    )
-
-    return fin_graph
+    return assemble_fin_graph(model, checkpointer, get_memory_manager())
 
 
 async def interactive_mode(fin_graph: FinGraph, agents: Optional[list] = None):
@@ -223,13 +195,13 @@ async def test_dual_agent_voting(fin_graph: FinGraph, symbol: str = "AAPL"):
         f"\n请分析并给出交易决策（BUY/HOLD/SELL）和目标仓位比例（target_position_pct）。"
     )
 
-    print(f"\n📋 输入信息:")
+    print("\n📋 输入信息:")
     print(f"   股票: {symbol}")
-    print(f"   价格: $278.78")
-    print(f"   现金: $10,000")
-    print(f"   持仓: 0 shares")
+    print("   价格: $278.78")
+    print("   现金: $10,000")
+    print("   持仓: 0 shares")
 
-    print(f"\n⏳ 正在调用双Agent分析（可能需要30-60秒）...")
+    print("\n⏳ 正在调用双Agent分析（可能需要30-60秒）...")
     print("-" * 70)
 
     result = await fin_graph.run(user_input, thread_id=thread_id)
@@ -244,29 +216,29 @@ async def test_dual_agent_voting(fin_graph: FinGraph, symbol: str = "AAPL"):
     tech_vote = result.get("tech_vote", {})
 
     # Morefit (基本面)
-    print(f"\n🏢 Morefit (基本面分析):")
+    print("\n🏢 Morefit (基本面分析):")
     print(f"   投票: {morefit_vote.get('vote', 'N/A')}")
     print(f"   理由: {morefit_vote.get('reason', 'N/A')[:150]}...")
     if "target_position_pct" in morefit_vote:
         print(f"   目标仓位: {morefit_vote.get('target_position_pct')*100:.1f}%")
 
     # Technical_Nerd (技术面)
-    print(f"\n📈 Technical_Nerd (技术面分析):")
+    print("\n📈 Technical_Nerd (技术面分析):")
     print(f"   投票: {tech_vote.get('vote', 'N/A')}")
     print(f"   理由: {tech_vote.get('reason', 'N/A')[:150]}...")
     if "target_position_pct" in tech_vote:
         print(f"   目标仓位: {tech_vote.get('target_position_pct')*100:.1f}%")
 
     # 最终结果
-    print(f"\n" + "-" * 70)
-    print(f"🏆 最终决策:")
+    print("\n" + "-" * 70)
+    print("🏆 最终决策:")
     print(f"   投票: {final_decision.get('final_vote', 'N/A')}")
     print(f"   置信度: {final_decision.get('confidence', 'N/A')}%")
     print(f"   建议: {final_decision.get('suggestion', 'N/A')}")
     if "target_position_pct" in final_decision:
         print(f"   目标仓位: {final_decision.get('target_position_pct')*100:.1f}%")
 
-    print(f"\n" + "=" * 70)
+    print("\n" + "=" * 70)
 
     # 返回完整结果供进一步检查
     return {

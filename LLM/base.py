@@ -1,10 +1,9 @@
 from datetime import datetime
 from langchain.agents import create_agent
-from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, BaseMessage
 from dotenv import load_dotenv
 from dataclasses import dataclass
-from typing import Optional, Dict, Any, List, Iterator
+from typing import Optional, Dict, Any, List
 import os
 import uuid
 import asyncio
@@ -52,17 +51,6 @@ if AgentMiddleware is not None:
 # 技能目录：LLM/skills/<skill_name>/SKILL.md
 SKILLS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skills")
 SKILLS_SOURCE = "/skills/fingent/"
-
-# MySQL checkpointer 仅用于 __main__ demo，惰性导入（默认环境不安装 mysql 依赖）
-try:
-    from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
-except ImportError:
-    PyMySQLSaver = None
-
-try:
-    import LLM.tools as tools
-except ImportError:
-    import tools
 
 try:
     from Data.memory import get_memory_manager, MemoryManager
@@ -567,53 +555,3 @@ NEVER GUESS DATES. You are also a professional financial assistant."""
         if state and "channel_values" in state:
             return state["channel_values"].get("messages", [])
         return []
-
-
-# ==================== Usage Examples ====================
-
-if __name__ == "__main__":
-    # 初始化
-    _mysql_saver_ctx = PyMySQLSaver.from_conn_string(
-        os.getenv("MYSQL_URL", "mysql+pymysql://root:password@localhost:3306/fingent")
-    )
-    checkpointer = _mysql_saver_ctx.__enter__()
-    checkpointer.setup()
-    model = ChatOpenAI(
-        api_key=qianwen_api_key,
-        base_url=os.getenv(
-            "MODEL_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        ),
-        model="qwen-max",
-        temperature=0.3,
-    )
-
-    agent = Agent(
-        model=model,
-        tools=[tools.get_us_stock_price],
-        system_prompt="You are a helpful assistant.",
-        checkpointer=checkpointer,
-    )
-
-    # 示例 1：单次对话
-    resp = agent.chat("查一下英伟达股价")
-    print(f"Answer: {resp.final_answer}")
-    print(f"Steps: {resp.step_count}")
-
-    # 示例 3：获取历史状态（即使在另一个函数/进程中）
-    current_state = agent.get_state()
-    print(f"Current thread has {current_state.step_count} messages")
-
-    # 示例 4：切换回之前的线程继续对话
-    previous_thread_id = resp.thread_id  # 使用之前的线程ID
-    agent.switch_thread(previous_thread_id)
-    print(f"Switched to: {previous_thread_id}")
-
-    history = agent.get_state()
-    if history:
-        print(history.show_chain())  # 会显示英伟达对话历史
-    resp = agent.chat("再查一下苹果公司的股价")
-    thread_id = resp.thread_id
-    print(f"Answer: {resp.final_answer}")
-    print(f"Steps: {resp.step_count}")
-    print(f"thread ID: {thread_id}")
-    print(resp.show_chain())

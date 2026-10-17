@@ -5,15 +5,10 @@ Tests for Data/memory.py — MemoryManager (SQLite, no external deps).
 import asyncio
 import pytest
 from Data.memory import (
-    MemoryManager,
-    AnalysisRecord,
-    AgentStat,
-    UserRule,
     WEIGHT_AGREE_DELTA,
     WEIGHT_DISAGREE_DELTA,
     WEIGHT_MAX,
     WEIGHT_MIN,
-    WEIGHT_RULE_PROMOTE_THRESHOLD,
     get_memory_manager,
 )
 

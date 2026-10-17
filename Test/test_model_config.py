@@ -10,7 +10,6 @@ from config import (
     reset_model_config,
     MODEL_PRESETS,
     get_settings,
-    _settings,
 )
 import config as config_module
 

@@ -3,9 +3,7 @@ Tests for Trade/adapter.py — GraphSignal, clamp_pct, map_vote_to_target_pct, e
 """
 
 import json
-import pytest
 from Trade.adapter import (
-    GraphSignal,
     build_graph_input,
     clamp_pct,
     map_vote_to_target_pct,

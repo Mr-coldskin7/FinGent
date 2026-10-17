@@ -1,10 +1,3 @@
-try:
-    from LLM.preprocess import Preprocessor
-except ImportError:
-    from preprocess import Preprocessor
-import json
-import re
-
 json_format = {
     "status": "ready | clarification_needed",
     "intent": {
@@ -47,33 +40,3 @@ class Router:
 
         intent = preprocess_result["intent"]["type"]
         return self.ROUTES.get(intent, "unknown")
-
-
-if __name__ == "__main__":
-    # 初始化
-    from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
-    from dotenv import load_dotenv
-    import os
-
-    load_dotenv()
-    qianwen_api_key = os.getenv("QIANWEN_API_KEY")
-    _mysql_saver_ctx = PyMySQLSaver.from_conn_string(
-        os.getenv("MYSQL_URL", "mysql+pymysql://root:password@localhost:3306/fingent")
-    )
-    checkpointer = _mysql_saver_ctx.__enter__()
-    checkpointer.setup()
-    from langchain_openai import ChatOpenAI
-
-    model = ChatOpenAI(
-        api_key=qianwen_api_key,
-        base_url=os.getenv(
-            "MODEL_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
-        ),
-        model="qwen-max",
-        temperature=0.3,
-    )
-
-    preprocessor = Preprocessor(model, checkpointer)
-    reponse = preprocessor.parse("达子今天股价多少")
-    router = Router()
-    next_node = router.route(reponse)

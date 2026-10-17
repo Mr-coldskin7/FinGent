@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "dompurify": "^3.4.17",
     "lightweight-charts": "^5.1.0",
     "lucide-vue-next": "^0.575.0",
     "marked": "^17.0.3",

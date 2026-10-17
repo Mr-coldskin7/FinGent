@@ -3,7 +3,6 @@ Tests for LLM/preprocess.py — _extract_json() and _parse_backtest_format().
 These are pure logic tests that do NOT require an LLM or checkpointer.
 """
 
-import json
 import pytest
 from unittest.mock import MagicMock
 

@@ -194,3 +194,66 @@
 - **选做 P3**：`run_backend.sh` 尊重 `API_HOST/PORT` + 退避重启；规则 `created_at` 统一 UTC；RulesPanel 补 tiktok-auntie 标签；`Eval/cases.json` 增加 sector 用例；`fetch_daily_bars` 的 period2 揪 +1 天（开区间）；graph/api_server 的 fire-and-forget 任务保留引用；无个股实体（闲聊/板块）不再写入分析历史；`CACHE_DEFAULT_TTL` 接入 `InfoService`（此前是死配置）；`Trade/backtest_audit.jsonl` 入 gitignore。
 - **遗留（review 未修）**：`_get_us_market` 全有或全无（19/20 也整批兕底）— 保持一致性优先，后续可考虑部分接受阈值；pyright 历史噪声按 §8.4 维持不追零。
 
+
+### 7.19 演示前整理（2026-10-17）
+
+**死代码与重复（已删除）**
+- `Data/unified_models.py`：与 `Data/models.py` 逐行相同（仅注释不同），无引用 → 删除。
+- `Trade/backtest_cli.py`：2026-05 旧版副本，与根目录 `backtest_cli.py`（README 首推、功能更新）重复 → 删除，根目录版为唯一回测 CLI。
+- `Frontend/src/components/BacktestChart.vue`：无引用（回测图表用 `BacktestCandleChart.vue`）→ 删除。
+- `Frontend/public/test-chart.html`：开发期接口测试页，直接请求后端 → 删除。
+- `Data/memory.py::_sync_record_feedback`：无引用 → 删除。
+- `config.py` 的 `mysql_url`、`memory_db_path`：无引用（记忆库直接读 `FINGENT_MEMORY_DB`）→ 删除；`.env.example` 同步去掉 `MYSQL_URL`。
+- `LLM/base.py`、`LLM/preprocess.py`、`LLM/router.py` 末尾的 MySQL `__main__` 演示块及其内嵌坏测试（`PyMySQLSaver` 未导入时必然报错）→ 删除。
+- `api_server.py` 的通配导入 `from LLM.unified_stock_tools import *`：未使用 → 删除。
+
+**命名统一**
+- Python 类 `TECHNICAL_NERD` → `TechnicalNerd`（其余三个已是驼峰）。运行时投票键仍是注册表名，类名只参与记忆注入，而记忆层的 `canonical_agent_name` 忽略大小写与分隔符，两种写法都归一到 `technical-nerd`（已验证）。
+- 前端 Agent 名称/颜色映射原有 5 处独立维护，且键使用 `Morefit / TECHNICAL_NERD` 等类名，**而后端实际发送的是 `morefit / technical-nerd`，映射从未命中**（界面显示原始英文 ID、颜色落到默认灰）。现统一到 `Frontend/src/utils/agents.ts`，键为注册表名，查找时归一化。
+
+**重复逻辑合并**
+- FinGraph 组装原在 `main.py`、`api_server.py`（主图与两处回测图）各写一遍 → 合并为 `LLM/graph.py::assemble_fin_graph(llm, checkpointer, memory_manager, agent_names)`。回测仅传入 `BACKTEST_AGENT_NAMES = ("technical-nerd", "morefit")`，行为与原先一致。
+
+**代码质量**
+- 新增 `[tool.ruff]` 基线（`E9 / F / B`，忽略 B905）。改动前 859 条（大量为未配置时的风格类噪声），改动后该基线下 **0 条**。
+- 修复：未使用导入/变量、重复导入、循环变量、缺少异常链（B904，补 `from err`）。
+- `@app.on_event("startup")` → `lifespan`，消除 FastAPI 弃用告警（测试告警 4 → 2）。
+- pyright 历史噪声（HEAD 时即存在）仍按 §8.4 维持，不追零。
+
+**缓存与产物**
+- 删除 `__pycache__`、`.pytest_cache`、`.ruff_cache`、`.playwright-mcp/`（测试截图，已 gitignore）。
+- `git rm --cached` 了 63 个被追踪的 `.pyc`（此前 `.gitignore` 已忽略但未清出索引）。
+- **保留** `.cache/market/`：启动即用的行情快照，演示时可把美股/A 股首屏从 24–50 秒降到毫秒级；`Eval/runs/`、`memory/`、`memory/backups/` 为演示证据与用户数据，不删。
+
+**本轮发现的真实缺陷**
+- `Data/providers/web_search.py` 读取的环境变量名为 `BO_CHA_API_KEY`（多一个下划线），而 `.env` 中为 `BOCHA_API_KEY`，导致请求头恒为 `Bearer None`、联网搜索恒 401。已修正；未配置 key 时改为明确报错 `未配置 BOCHA_API_KEY`，不再发出非法请求头。**注意：当前 `.env` 中 `BOCHA_API_KEY` 为空，新闻检索仍不可用，需主人决定是否配置。**
+- `scripts/run_backend.sh` 默认 `API_HOST=0.0.0.0`，uvicorn 不读取 `.env`，即使 `.env` 写了 127.0.0.1 也不生效 → 脚本默认值改为 `127.0.0.1`。需要局域网访问时显式设置 `API_HOST=0.0.0.0`。
+
+**演示支持**
+- `scripts/demo_preflight.py`：只用标准库；检查 `.env` 键是否存在（不打印值）、后端、Agent 注册表、模型配置、行情预热、前端构建、评测产物、pytest；`--ask` 发一次真实问答。
+- `DEMO.md`：演示脚本（每步的耗时与讲解点）、已知风险与应对、兜底方案、禁忌操作。
+
+**验证**
+- `uv run pytest Test -q` → 261 passed（2 warnings）。
+- `uv run ruff check .` → All checks passed。
+- `Frontend: npm run build` → 通过（vue-tsc + vite）。
+- 后端重启后：preflight `--ask` 全部通过；单 Agent 分析（morefit）返回 `route_info.mode=single`、`agent_name=morefit`；浏览器完整跑通一次多 Agent 投票，决策卡片标签已显示为中文名。
+- 反馈勾选框与思考链标题的标签替换仅经构建验证，未在浏览器中重新跑一次分析确认。
+
+**未做（有意留到演示之后）**
+- `api_server.py`（约 1700 行）按 router 拆分；`Data/memory.py` 拆分。改动面大，演示前不动。
+- `requirements.txt`（UTF-16 编码）与 `pyproject.toml` / `uv.lock` 并存，待确认是否保留。
+- 旧版 `LLM/tools.py` 仍被 preprocess 用于 `fuzzy_search_us_symbols`，与 `unified_stock_tools.py` 功能部分重叠，待统一。
+
+### 7.20 API 鉴权 + Markdown 清洗（2026-10-17 晚）
+
+- **决策**：默认拒绝。`/api/v1` 下除只读公开接口（行情、评测报告、回测图表）外，全部需要鉴权。判定逻辑集中在 `api_auth.py::decide()`（纯函数，29 个测试）。
+- **行为**：配置 `FINGENT_API_TOKEN`（≥16 位，否则拒绝启动）后，受保护接口需要 `Authorization: Bearer`；未配置时仅回环地址可访问，其它来源 403。
+- **配置变更**：`API_HOST` 默认改为 `127.0.0.1`；`CORS_ORIGINS` 默认改为前端本地地址（`.env` 中的 `*` 需人工改）；CORS 允许头收紧为 `Authorization, Content-Type`。
+- **前端**：所有请求经 `Frontend/src/utils/api.ts::apiFetch()`（23 处调用已替换）；设置面板新增「访问令牌」页签（保存在 localStorage，可验证、可清除）。
+- **安全缺口的同步修复**：`MarkdownRender.vue` 原先用 `v-html` 直接渲染模型输出，没有清洗。令牌存在 localStorage，XSS 会使鉴权失效，因此引入 DOMPurify（已用 jsdom 验证 onerror / script / javascript: 链接被去除）。
+- **验证**：pytest 290 passed；ruff 通过；`npm run build` 通过；真实进程验证——本机无令牌 200；0.0.0.0 + 令牌实例，局域网无令牌 401、错误令牌 401、Basic scheme 401、正确令牌 200、公开接口 200、CORS 预检 200；0.0.0.0 无令牌实例，局域网 403、本机 200。
+- **未验证**：前端在"已配置令牌"模式下的完整交互（当前前端访问的是本机后端，始终免令牌）。
+- **文档**：`docs/AUTH.md`（威胁模型、规则、行为矩阵、配置、测试、局限、面试表述、待办）。
+- **未做（已列入 AUTH.md 待办）**：速率限制、账号体系、HTTPS 反代配置、CSP、base_url 白名单、审计日志、令牌轮换。
+- **RAG**：本轮只写了待讨论的计划 `docs/RAG_TODO.md`，未实施。RAGAS 判断：现阶段不需要，先做确定性指标。

@@ -157,11 +157,11 @@ def instantiate(
         raise RegistryError(f"未知 agent: {name}")
 
     from LLM.base import Agent
-    from LLM.agent import Morefit, RiskManager, SentimentAnalyzer, TECHNICAL_NERD
+    from LLM.agent import Morefit, RiskManager, SentimentAnalyzer, TechnicalNerd
 
     # 内置 agent 用各自子类（保留 format_prompt 行为）；自定义 skill 用通用 Agent
     BUILTIN = {
-        "technical-nerd": TECHNICAL_NERD,
+        "technical-nerd": TechnicalNerd,
         "morefit": Morefit,
         "risk-manager": RiskManager,
         "sentiment-analyzer": SentimentAnalyzer,

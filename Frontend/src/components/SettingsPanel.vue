@@ -1,11 +1,56 @@
 <script setup lang="ts">
+import { API_BASE, apiFetch, getApiToken, setApiToken } from '../utils/api';
 import { friendlyError } from '../utils/errors';
 import { ref, reactive, onMounted } from 'vue';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
 
 // ── Tab 切换 ──────────────────────────────────────────────
-const activeTab = ref<'model' | 'agents'>('model');
+const activeTab = ref<'model' | 'agents' | 'access'>('model');
+
+// ── 访问令牌（保存在本机浏览器；后端配置 FINGENT_API_TOKEN 时需要）──
+const tokenInput = ref('');
+const tokenSaved = ref(!!getApiToken());
+const tokenStatus = ref<{ ok: boolean; text: string } | null>(null);
+const tokenTesting = ref(false);
+
+function saveToken() {
+  const value = tokenInput.value.trim();
+  if (!value) {
+    tokenStatus.value = { ok: false, text: '请先输入令牌' };
+    return;
+  }
+  setApiToken(value);
+  tokenInput.value = '';
+  tokenSaved.value = true;
+  tokenStatus.value = { ok: true, text: '已保存到本机浏览器' };
+}
+
+function clearToken() {
+  setApiToken('');
+  tokenInput.value = '';
+  tokenSaved.value = false;
+  tokenStatus.value = { ok: true, text: '已清除本机令牌' };
+}
+
+async function testToken() {
+  tokenTesting.value = true;
+  tokenStatus.value = null;
+  try {
+    // 受保护接口：能返回 200 说明令牌（或本机免令牌）有效
+    const res = await apiFetch(`${API_BASE}/api/v1/agents`);
+    if (res.ok) {
+      tokenStatus.value = { ok: true, text: '鉴权通过，可以访问受保护接口' };
+    } else {
+      const data = await res.json().catch(() => ({}));
+      tokenStatus.value = { ok: false, text: data.error || `HTTP ${res.status}` };
+    }
+  } catch (e) {
+    tokenStatus.value = { ok: false, text: friendlyError(e) };
+  } finally {
+    tokenTesting.value = false;
+  }
+}
 
 // ── 模型设置 ──────────────────────────────────────────────
 interface ModelConfig {
@@ -48,7 +93,7 @@ const presetOptions = [
 async function loadConfig() {
   loading.value = true;
   try {
-    const res = await fetch(`${API_BASE}/api/v1/model/config`);
+    const res = await apiFetch(`${API_BASE}/api/v1/model/config`);
     const data = await res.json();
     if (data.success) {
       presets.value = data.presets || {};
@@ -83,7 +128,7 @@ async function testConnection() {
   testing.value = true;
   testResult.value = null;
   try {
-    const res = await fetch(`${API_BASE}/api/v1/model/test`, {
+    const res = await apiFetch(`${API_BASE}/api/v1/model/test`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -111,7 +156,7 @@ async function saveConfig() {
     body.temperature = config.temperature;
     if (selectedPreset.value) body.preset = selectedPreset.value;
 
-    const res = await fetch(`${API_BASE}/api/v1/model/config`, {
+    const res = await apiFetch(`${API_BASE}/api/v1/model/config`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -130,7 +175,7 @@ async function saveConfig() {
 
 async function resetConfig() {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/model/reset`, { method: 'POST' });
+    const res = await apiFetch(`${API_BASE}/api/v1/model/reset`, { method: 'POST' });
     const data = await res.json();
     if (data.success) {
       config.base_url = data.config.base_url;
@@ -166,7 +211,7 @@ const isDirty = () => skillContent.value !== skillOriginal.value;
 
 async function loadAgents() {
   try {
-    const res = await fetch(`${API_BASE}/api/v1/agents`);
+    const res = await apiFetch(`${API_BASE}/api/v1/agents`);
     const data = await res.json();
     if (data.success) {
       agents.value = data.agents || [];
@@ -188,7 +233,7 @@ async function selectAgent(name: string) {
   skillLoading.value = true;
   skillMessage.value = null;
   try {
-    const res = await fetch(`${API_BASE}/api/v1/agents/${name}`);
+    const res = await apiFetch(`${API_BASE}/api/v1/agents/${name}`);
     const data = await res.json();
     if (data.success) {
       skillContent.value = data.content || '';
@@ -208,7 +253,7 @@ async function saveSkill() {
   skillSaving.value = true;
   skillMessage.value = null;
   try {
-    const res = await fetch(`${API_BASE}/api/v1/agents/${selectedAgent.value}`, {
+    const res = await apiFetch(`${API_BASE}/api/v1/agents/${selectedAgent.value}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: skillContent.value }),
@@ -233,7 +278,7 @@ async function reloadAgents() {
   reloading.value = true;
   skillMessage.value = null;
   try {
-    const res = await fetch(`${API_BASE}/api/v1/agents/reload`, { method: 'POST' });
+    const res = await apiFetch(`${API_BASE}/api/v1/agents/reload`, { method: 'POST' });
     const data = await res.json();
     skillMessage.value = {
       success: !!data.success,
@@ -274,6 +319,46 @@ onMounted(() => {
       >
         Agent 角色管理
       </button>
+      <button
+        :class="['tab', { active: activeTab === 'access' }]"
+        @click="activeTab = 'access'"
+      >
+        访问令牌
+      </button>
+    </div>
+
+    <!-- ═══════════ Tab 3: 访问令牌 ═══════════ -->
+    <div v-show="activeTab === 'access'" class="settings-body">
+      <div class="form-group">
+        <label>API 访问令牌</label>
+        <input
+          v-model="tokenInput"
+          type="password"
+          class="form-input"
+          autocomplete="off"
+          :placeholder="tokenSaved ? '已保存（输入新值可覆盖）' : '粘贴后端 FINGENT_API_TOKEN 的值'"
+        />
+        <span class="hint">
+          后端配置了 FINGENT_API_TOKEN 时，写入、对话、模型配置等接口需要它；
+          未配置且后端只在本机运行时可留空。令牌只保存在本机浏览器。
+        </span>
+      </div>
+
+      <div class="actions">
+        <button class="btn btn-test" @click="testToken" :disabled="tokenTesting">
+          {{ tokenTesting ? '验证中...' : '验证令牌' }}
+        </button>
+        <button class="btn btn-save" @click="saveToken" :disabled="!tokenInput.trim()">
+          保存令牌
+        </button>
+        <button class="btn btn-reset" @click="clearToken" :disabled="!tokenSaved">
+          清除令牌
+        </button>
+      </div>
+
+      <div v-if="tokenStatus" :class="['result', tokenStatus.ok ? 'success' : 'error']">
+        {{ tokenStatus.ok ? '✓' : '✕' }} {{ tokenStatus.text }}
+      </div>
     </div>
 
     <!-- ═══════════ Tab 1: 模型设置 ═══════════ -->

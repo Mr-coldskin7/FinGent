@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { API_BASE, apiFetch } from './utils/api';
 import { friendlyError } from './utils/errors';
 import { ref, watch, nextTick, computed } from 'vue';
 import Sidebar from './components/Sidebar.vue';
@@ -14,8 +15,9 @@ import SettingsPanel from './components/SettingsPanel.vue';
 import EvalPanel from './components/EvalPanel.vue';
 import RulesPanel from './components/RulesPanel.vue';
 import type { Message, ChatResponse, AnalysisData } from './types/index';
+import { agentLabel } from './utils/agents';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
 
 const userInput = ref('');
 const messages = ref<Message[]>([]);
@@ -198,8 +200,8 @@ function generateThinkingSteps(data: ChatResponse): any[] {
       status: 'completed'
     });
   } else {
-    const route = intentType === 'TECHNICAL_ANALYSIS' ? 'TECHNICAL_NERD' :
-                  intentType === 'COMPANY_INFO' ? 'Morefit' : 'ALL';
+    const route = intentType === 'TECHNICAL_ANALYSIS' ? 'technical-nerd' :
+                  intentType === 'COMPANY_INFO' ? 'morefit' : 'ALL';
     steps.push({
       id: `step-${stepId++}`,
       type: 'tool_decision',
@@ -220,7 +222,7 @@ function generateThinkingSteps(data: ChatResponse): any[] {
       steps.push({
         id: `step-${stepId++}`,
         type: 'thinking',
-        title: `${agentChain.agent} 开始分析`,
+        title: `${agentLabel(agentChain.agent)} 开始分析`,
         content: `${agentChain.agent} 启动分析流程，准备调用工具获取数据`,
         agent: agentChain.agent,
         status: 'completed'
@@ -269,7 +271,7 @@ function generateThinkingSteps(data: ChatResponse): any[] {
       steps.push({
         id: `step-${stepId++}`,
         type: 'analysis',
-        title: `${agentChain.agent} 分析完成`,
+        title: `${agentLabel(agentChain.agent)} 分析完成`,
         content: `基于工具返回数据完成分析判断`,
         agent: agentChain.agent,
         status: 'completed'
@@ -502,7 +504,7 @@ const sendMessage = async () => {
   const tryStream = async (): Promise<boolean> => {
     let res: Response;
     try {
-      res = await fetch(`${API_BASE}/api/v1/chat-stream`, {
+      res = await apiFetch(`${API_BASE}/api/v1/chat-stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -571,7 +573,7 @@ const sendMessage = async () => {
     const streamed = await tryStream();
     if (!streamed) {
       // 回退：旧版非流式接口
-      const res = await fetch(`${API_BASE}/api/v1/chat`, {
+      const res = await apiFetch(`${API_BASE}/api/v1/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -635,7 +637,7 @@ const submitFeedback = async (feedbackType: 'agree' | 'disagree' | 'correction')
       payload.rule_text = correctionText.value.trim();
     }
 
-    const res = await fetch(`${API_BASE}/api/v1/feedback`, {
+    const res = await apiFetch(`${API_BASE}/api/v1/feedback`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -697,7 +699,7 @@ const submitReview = async () => {
   feedbackError.value = null;
 
   try {
-    const res = await fetch(`${API_BASE}/api/v1/review`, {
+    const res = await apiFetch(`${API_BASE}/api/v1/review`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -822,7 +824,7 @@ const quickInput = (text: string) => {
               <span class="feedback-agents-hint">勾选需要反馈的 Agent（不勾选则只记录历史，不改权重）：</span>
               <label v-for="a in feedbackAgents" :key="a" class="feedback-agent-option">
                 <input type="checkbox" :value="a" v-model="selectedAgents" />
-                {{ a }}
+                {{ agentLabel(a) }}
               </label>
             </div>
             <div class="feedback-actions">

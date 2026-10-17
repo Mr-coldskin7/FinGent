@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { API_BASE, apiFetch } from '../utils/api';
 import { friendlyError } from '../utils/errors';
 /**
  * 评测中心：只读展示 Eval/runs/ 的可靠性报告、单次运行时间线、报告原文与结构化日志。
@@ -17,7 +18,7 @@ import type {
 } from '../types';
 import MarkdownRender from './MarkdownRender.vue';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
 
 const runs = ref<EvalRunSummary[]>([]);
 const loadingRuns = ref(false);
@@ -42,7 +43,7 @@ async function loadRuns() {
   loadingRuns.value = true;
   error.value = '';
   try {
-    const res = await fetch(`${API_BASE}/api/v1/eval/runs`);
+    const res = await apiFetch(`${API_BASE}/api/v1/eval/runs`);
     const data = await res.json();
     runs.value = data.runs || [];
     const first = runs.value[0];
@@ -63,10 +64,10 @@ async function selectRun(runId: string) {
   expandedLog.value = null;
   try {
     const [r1, r2, r3, r4] = await Promise.all([
-      fetch(`${API_BASE}/api/v1/eval/runs/${runId}`).then((r) => r.json()),
-      fetch(`${API_BASE}/api/v1/eval/runs/${runId}/trace`).then((r) => r.json()),
-      fetch(`${API_BASE}/api/v1/eval/runs/${runId}/report-md`).then((r) => r.json()),
-      fetch(`${API_BASE}/api/v1/eval/runs/${runId}/log`).then((r) => r.json() as Promise<EvalLogResponse>),
+      apiFetch(`${API_BASE}/api/v1/eval/runs/${runId}`).then((r) => r.json()),
+      apiFetch(`${API_BASE}/api/v1/eval/runs/${runId}/trace`).then((r) => r.json()),
+      apiFetch(`${API_BASE}/api/v1/eval/runs/${runId}/report-md`).then((r) => r.json()),
+      apiFetch(`${API_BASE}/api/v1/eval/runs/${runId}/log`).then((r) => r.json() as Promise<EvalLogResponse>),
     ]);
     report.value = r1.report || null;
     traces.value = r2.runs || [];

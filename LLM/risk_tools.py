@@ -8,7 +8,6 @@ import asyncio
 import json
 import sys
 import os
-from datetime import datetime
 from typing import List, Optional
 
 import numpy as np
@@ -22,7 +21,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-from Data.service import InfoService, fetch_stock_data
+from Data.service import InfoService
 from Data.models import DataType
 
 # 全局 service 实例（复用缓存）

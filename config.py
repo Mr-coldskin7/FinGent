@@ -4,9 +4,8 @@ FinGent 统一配置管理
 支持运行时动态切换模型配置（ModelConfig）。
 """
 
-import os
 from typing import Optional
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, asdict
 from pydantic_settings import BaseSettings
 from pydantic import Field
 
@@ -77,11 +76,6 @@ class Settings(BaseSettings):
 
     # ── 存储 ─────────────────────────────────────────────────────────
     redis_url: str = Field(default="redis://localhost:6379/0", alias="REDIS_URL")
-    mysql_url: str = Field(
-        default="mysql+pymysql://root:password@localhost:3306/fingent",
-        alias="MYSQL_URL",
-    )
-    memory_db_path: Optional[str] = Field(default=None, alias="FINGENT_MEMORY_DB")
 
     # ── 缓存 ─────────────────────────────────────────────────────────
     # memory: 仅 L1 进程内缓存（默认）；redis: 额外连接 REDIS_URL 作 L2。
@@ -96,9 +90,14 @@ class Settings(BaseSettings):
     vote_reduce_threshold: float = Field(default=0.4, alias="VOTE_REDUCE_THRESHOLD")
 
     # ── 服务器 ───────────────────────────────────────────────────────
-    api_host: str = Field(default="0.0.0.0", alias="API_HOST")
+    api_host: str = Field(default="127.0.0.1", alias="API_HOST")
     api_port: int = Field(default=8000, alias="API_PORT")
-    cors_origins: str = Field(default="*", alias="CORS_ORIGINS")
+    cors_origins: str = Field(
+        default="http://localhost:5173,http://127.0.0.1:5173", alias="CORS_ORIGINS"
+    )
+    # 访问令牌：非空时所有受保护 /api/v1 接口必须携带 Authorization: Bearer <token>。
+    # 为空时仅允许本机回环地址访问受保护接口（见 api_auth.py）。
+    api_token: str = Field(default="", alias="FINGENT_API_TOKEN")
 
     # ── 回测 ─────────────────────────────────────────────────────────
     backtest_max_concurrent: int = Field(default=5, alias="BACKTEST_MAX_CONCURRENT")

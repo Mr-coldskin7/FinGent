@@ -12,7 +12,9 @@ from Data.memory import MemoryManager
 def client(tmp_path, monkeypatch):
     mm = MemoryManager(db_path=str(tmp_path / "api.db"))
     monkeypatch.setattr(api_server, "memory_manager", mm)
-    return TestClient(api_server.app), mm
+    # 本文件测业务逻辑，不测鉴权：关闭 token，并以本机回环地址访问（鉴权规则见 test_api_auth.py）
+    monkeypatch.setattr(api_server.settings, "api_token", "")
+    return TestClient(api_server.app, client=("127.0.0.1", 50000)), mm
 
 
 def _run(coro):

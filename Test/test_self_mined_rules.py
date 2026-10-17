@@ -1,5 +1,4 @@
 """自挖掘规则（self_mined，默认禁用）的提炼逻辑单测。"""
-from datetime import datetime
 
 from Data.memory import MemoryManager
 
@@ -47,7 +46,7 @@ def test_failed_bullish_vote_mines_inactive_self_mined_rule(tmp_path):
 
 def test_repeated_failure_increments_trigger_count_stays_inactive(tmp_path):
     mm = _mm(tmp_path)
-    for i in range(2):
+    for _ in range(2):
         _seed_failed_analysis(mm, user_id="u1", symbol="NVDA", agent="morefit",
                               vote="STRONG_BUY", horizon=20, correct=0, excess=-0.05)
     mined2 = mm._sync_mine_outcome_rules(horizon=20)

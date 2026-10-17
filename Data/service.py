@@ -130,7 +130,7 @@ class InfoService:
                 code = zh_stock.input2number(identifier)
                 return "CN", code
             except Exception as e:
-                raise ValueError(f"无法识别A股名称: {identifier}, 错误: {e}")
+                raise ValueError(f"无法识别A股名称: {identifier}, 错误: {e}") from e
 
         # 美股：纯字母，1-5位（允许包含-，如BRK-B）
         clean_id = identifier.replace("-", "").replace(".", "")

@@ -166,7 +166,6 @@ def plot_backtest_matplotlib(
     for trade in buy_trades:
         trade_date = datetime.strptime(trade.date, "%Y-%m-%d")
         if trade_date in dates:
-            idx = dates.index(trade_date)
             ax1.scatter(
                 trade_date,
                 trade.price,
@@ -192,7 +191,6 @@ def plot_backtest_matplotlib(
     for trade in sell_trades:
         trade_date = datetime.strptime(trade.date, "%Y-%m-%d")
         if trade_date in dates:
-            idx = dates.index(trade_date)
             ax1.scatter(
                 trade_date,
                 trade.price,

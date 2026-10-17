@@ -52,7 +52,7 @@ async def ak_call(func_name: str, *, timeout: float = 120, **kwargs: Any) -> Any
     """
     loop = asyncio.get_running_loop()
     last_error: Exception | None = None
-    for attempt in (1, 2):
+    for _attempt in (1, 2):
         try:
             fut = loop.run_in_executor(_get_executor(), _worker, func_name, kwargs)
             return await asyncio.wait_for(fut, timeout=timeout)

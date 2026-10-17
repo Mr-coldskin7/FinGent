@@ -7,8 +7,6 @@ from typing import Any, Dict, Optional
 
 import pandas as pd
 
-from Data.models import DataType
-from Data.service import InfoService
 from Trade.adapter import build_graph_input, extract_graph_signal
 from typing import List
 

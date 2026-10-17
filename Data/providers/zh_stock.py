@@ -2,7 +2,6 @@ import asyncio
 from typing import Union
 
 import pandas as pd
-import akshare as ak  # 仅用于类型/常量，实际调用经 ak_call 隔离
 from Data.providers.ak_isolated import ak_call
 from datetime import date, datetime, timedelta
 
@@ -131,11 +130,11 @@ async def stock_individual_info(symbol: str):
         stock_individual_info_df = await ak_call("stock_individual_info_em", symbol=symbol
         )
         return stock_individual_info_df
-    except Exception:
+    except Exception as err:
         # 东方财富接口不可用，回退到本地 CSV
         name = mapping.get(symbol, "")
         if not name:
-            raise ValueError(f"无法从本地映射找到股票: {symbol}")
+            raise ValueError(f"无法从本地映射找到股票: {symbol}") from err
         return pd.DataFrame(
             {
                 "item": ["股票代码", "股票简称", "股票全称", "行业", "交易所"],

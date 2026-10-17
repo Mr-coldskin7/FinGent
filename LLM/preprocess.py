@@ -1,26 +1,14 @@
 try:
-    from LLM.base import AgentResponse, Agent
+    from LLM.base import Agent
 except ImportError:
-    from base import AgentResponse, Agent
+    from base import Agent
 from datetime import datetime, timedelta
-from langchain.agents import create_agent
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage, ToolMessage, BaseMessage
 from dotenv import load_dotenv
 
-# MySQL checkpointer 仅用于测试/demo，惰性导入（默认环境不安装 mysql 依赖）
-try:
-    from langgraph.checkpoint.mysql.pymysql import PyMySQLSaver
-except ImportError:
-    PyMySQLSaver = None
-from dataclasses import dataclass
-from typing import Optional, Dict, Any, List, Iterator
+from typing import Optional
 import os
-import uuid
 import json
 import re
-import unittest
-from unittest.mock import Mock
 
 try:
     from LLM.tools import fuzzy_search_us_symbols
@@ -47,7 +35,6 @@ json_format = {
 class Preprocessor(Agent):
     def __init__(self, model, checkpointer=None):
         date_30d_ago = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
-        year_start = f"{current_date[:4]}-01-01"
 
         # 注册表 agent 列表 → 注入提示词，供语义选择参考（LLM/registry.py）
         try:
@@ -132,7 +119,7 @@ class Preprocessor(Agent):
 
         try:
             return json.loads(cleaned)
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as err:
             json_match = re.search(
                 r"\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}", cleaned, re.DOTALL
             )
@@ -141,7 +128,7 @@ class Preprocessor(Agent):
                     return json.loads(json_match.group())
                 except json.JSONDecodeError:
                     pass
-            raise ValueError(f"Invalid JSON output: {raw_output[:200]}")
+            raise ValueError(f"Invalid JSON output: {raw_output[:200]}") from err
 
     def _parse_backtest_format(self, user_input: str) -> Optional[dict]:
         """
@@ -206,72 +193,5 @@ class Preprocessor(Agent):
         return result
 
 
-class TestPreprocessorThread(unittest.TestCase):
-    """简短测试：验证 thread_id 是否正确传递"""
-
-    def test_thread_id_passed_to_chat(self):
-        """测试 parse 方法是否正确传递 thread_id 到 chat"""
-        from unittest.mock import patch
-
-        _mysql_saver_ctx = PyMySQLSaver.from_conn_string(
-            os.getenv(
-                "MYSQL_URL", "mysql+pymysql://root:password@localhost:3306/fingent"
-            )
-        )
-        checkpointer = _mysql_saver_ctx.__enter__()
-        checkpointer.setup()
-        mock_model = Mock()
-        mock_model.bind_tools = Mock(return_value=mock_model)
-        preprocessor = Preprocessor(mock_model, checkpointer)
-
-        # Mock chat 方法
-        mock_response = AgentResponse(
-            final_answer='{"status":"ready","intent":{"type":"MARKET_DATA"},"entities":{"symbols":["NVDA"],"names":["英伟达"]},"time_range":{"start":"2024-01-01","end":"2024-01-01"},"original_input":"测试","clarification":null}',
-            messages=[],
-            thread_id="test-thread-123",
-            step_count=2,
-            tool_calls=0,
-        )
-
-        with patch("base.Agent.chat", return_value=mock_response) as mock_chat:
-            # 测试1: 不传 thread_id
-            preprocessor.parse("测试")
-            mock_chat.assert_called_with("测试", None)
-
-            # 测试2: 传入指定 thread_id
-            preprocessor.parse("测试", thread_id="my-thread")
-            mock_chat.assert_called_with("测试", "my-thread")
-
-            # 测试3: 相同 thread_id 多次调用
-            preprocessor.parse("第二次", thread_id="my-thread")
-            mock_chat.assert_called_with("第二次", "my-thread")
-
-            print(f"✓ thread_id 传递测试通过，共调用 {mock_chat.call_count} 次")
-
-
-# ==================== Usage Examples ====================
 if __name__ == "__main__":
-    import sys
-
-    if len(sys.argv) > 1 and sys.argv[1] == "--test":
-        # python preprocess.py --test
-        unittest.main(argv=[""], exit=False, verbosity=2)
-    else:
-        # 正常运行
-        _mysql_saver_ctx = PyMySQLSaver.from_conn_string(
-            os.getenv(
-                "MYSQL_URL", "mysql+pymysql://root:password@localhost:3306/fingent"
-            )
-        )
-        checkpointer = _mysql_saver_ctx.__enter__()
-        checkpointer.setup()
-        model = ChatOpenAI(
-            api_key=qianwen_api_key,
-            base_url=os.getenv(
-                "MODEL_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
-            ),
-            model="qwen-max",
-            temperature=0.3,
-        )
-        preprocessor = Preprocessor(model, checkpointer)
-        print(preprocessor.parse("达子今天股价多少"))
+    print("本模块无独立入口：单元测试见 Test/test_preprocess.py，交互请使用 main.py")

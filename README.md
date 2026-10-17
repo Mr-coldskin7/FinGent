@@ -155,7 +155,7 @@ npm run dev
 
 `FINGENT_CHECKPOINTER` 取值：`memory`（默认，进程内存）/ `redis`（需要 Redis 运行中）。详见 [`Agent.md`](Agent.md)。
 
-默认后端地址：`http://localhost:8000`  
+默认后端地址：`http://localhost:8000`
 默认前端地址：以 Vite 输出为准（通常为 `http://localhost:5173`）
 
 ### 4. 命令行模式
@@ -189,7 +189,9 @@ uv run python RAG/build_db.py
 | `FMP_API_KEY` | 否 | - | Financial Modeling Prep 密钥 |
 | `TIINGO_API_KEY` | 否 | - | Tiingo 密钥 |
 | `BOCHA_API_KEY` | 否 | - | Bocha AI Search 密钥 |
-| `API_HOST` | 否 | `0.0.0.0` | 后端监听地址 |
+| `API_HOST` | 否 | `127.0.0.1` | 后端监听地址；局域网访问需改为 `0.0.0.0` 并配置令牌 |
+| `FINGENT_API_TOKEN` | 否 | - | 访问令牌（≥16 位）。配置后受保护接口需 `Authorization: Bearer`；未配置时仅本机可访问受保护接口，详见 [docs/AUTH.md](docs/AUTH.md) |
+| `CORS_ORIGINS` | 否 | `http://localhost:5173,http://127.0.0.1:5173` | 允许的前端来源，逗号分隔；`*` 不推荐 |
 | `API_PORT` | 否 | `8000` | 后端端口 |
 
 完整配置见 [`config.py`](config.py)。
@@ -203,7 +205,7 @@ FinGent/
 ├── api_server.py              # FastAPI 主服务
 ├── main.py                    # CLI 入口
 ├── config.py                  # 统一配置管理
-├── backtest_cli.py            # 回测命令行工具
+├── backtest_cli.py            # 回测命令行工具（唯一入口）
 │
 ├── Data/                      # 数据服务层
 │   ├── cache.py               # L1 内存缓存 + L2 Redis 缓存（CACHE_BACKEND 可选）
@@ -213,7 +215,6 @@ FinGent/
 │   ├── symbol_alias.py        # 显式股票别名表（如 海力士 → SKHY）
 │   ├── models.py              # 统一数据模型
 │   ├── service.py             # InfoService 统一入口
-│   ├── unified_models.py      # 跨市场通用模型
 │   └── providers/             # 数据提供商适配器
 │       ├── adapters.py
 │       ├── us_stock.py        # 美股数据源
@@ -240,8 +241,7 @@ FinGent/
 ├── Trade/                     # 回测引擎层
 │   ├── runner.py
 │   ├── adapter.py
-│   ├── visualizer.py
-│   └── backtest_cli.py
+│   └── visualizer.py
 │
 ├── Eval/                      # 可靠性评测
 │   ├── reliability.py         # K 次运行成功率 / Wilson 区间 / 延迟 / 降级率
@@ -249,7 +249,9 @@ FinGent/
 │   └── runs/                  # 每次评测产物（report / trace / run_log，不入库）
 │
 ├── scripts/
-│   └── run_backend.sh         # 后端守护脚本（崩溃自动拉起）
+│   ├── run_backend.sh         # 后端守护脚本（崩溃自动拉起，默认仅本机）
+│   ├── demo_preflight.py      # 演示前自检（环境 / 后端 / 模型 / 行情预热 / 测试）
+│   └── run_outcome.sh         # 结果验证定时任务入口
 │
 ├── Frontend/                  # 用户交互层（Vue3 + Vite + Tailwind）
 │   ├── package.json
@@ -326,6 +328,12 @@ FinGent/
 # 运行测试
 uv run pytest Test -q
 
+# 代码质量检查（ruff 基线：语法 / 未定义名 / 未使用 / 常见缺陷）
+uv run ruff check .
+
+# 演示前自检（加 --ask 发一次真实问答）
+python3 scripts/demo_preflight.py
+
 # 可靠性评测（K 次运行成功率，消耗 LLM 配额，3 用例 × 5 次约 25–30 分钟）
 uv run python -m Eval.reliability --k 5          # 全部用例
 uv run python -m Eval.reliability --k 2 --only chat   # 冒烟
@@ -341,6 +349,8 @@ launchctl load ~/Library/LaunchAgents/com.fingent.outcome.plist
 cd Frontend
 npm run build
 ```
+
+演示流程与风险应对见 [DEMO.md](DEMO.md)。鉴权规则与威胁模型见 [docs/AUTH.md](docs/AUTH.md)。
 
 ---
 

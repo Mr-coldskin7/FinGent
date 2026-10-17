@@ -1,15 +1,13 @@
-import os, datetime as dt, pandas as pd
-import sys, os
+import os
+import sys
 from typing import Optional
 
 ROOT = os.path.normpath(os.path.join(__file__, "..", ".."))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
-from datetime import timedelta
 from langchain.tools import tool
 from pydantic import BaseModel, Field
 from Data.providers import us_stock, zh_stock
-from langchain.tools import tool
 
 
 class Symbol_Args(BaseModel):

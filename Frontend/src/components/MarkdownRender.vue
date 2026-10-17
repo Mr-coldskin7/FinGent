@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 interface Props {
   content: string;
@@ -14,8 +15,10 @@ marked.setOptions({
   gfm: true,
 });
 
+// 模型输出与联网搜索内容都可能含有恶意 HTML/脚本。渲染前必须清洗，否则可通过 XSS 读取
+// localStorage 中的 API 访问令牌（见 docs/AUTH.md）。
 const renderedHtml = computed(() => {
-  return marked.parse(props.content);
+  return DOMPurify.sanitize(marked.parse(props.content) as string);
 });
 </script>
 

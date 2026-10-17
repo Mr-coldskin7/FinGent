@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import { API_BASE, apiFetch } from '../utils/api';
 import { ref, reactive, computed, watch } from 'vue';
 import type { BacktestRequest, BacktestResult, DailyUpdate } from '../types/backtest';
 import { DEFAULT_BACKTEST_CONFIG } from '../types/backtest';
 import BacktestCandleChart from './BacktestCandleChart.vue';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
 
 const loading = ref(false);
 const streaming = ref(false);
@@ -118,7 +119,7 @@ const runStreamingBacktest = async (retryCount = 0) => {
       sessionId.value = `bt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     }
 
-    const response = await fetch(`${API_BASE}/api/v1/backtest-stream`, {
+    const response = await apiFetch(`${API_BASE}/api/v1/backtest-stream`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -266,7 +267,7 @@ const cancelBacktest = async () => {
   
   // 2. 发送取消请求到后端
   try {
-    const res = await fetch(`${API_BASE}/api/v1/backtest-cancel`, {
+    const res = await apiFetch(`${API_BASE}/api/v1/backtest-cancel`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ session_id: sessionId.value }),

@@ -25,6 +25,7 @@ const SOURCE_LABEL: Record<string, string> = { tiingo: 'Tiingo', yahoo: 'Yahoo F
 </script>
 
 <script setup lang="ts">
+import { API_BASE, apiFetch } from '../utils/api';
 import { friendlyError } from '../utils/errors';
 import { ref, onMounted, watch } from 'vue';
 
@@ -51,7 +52,7 @@ const emit = defineEmits<{
   analyze: [symbol: string, name: string];
 }>();
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+
 const CACHE_TTL = 30000; // 30 秒内视为新鲜，不重复请求
 
 const activeTab = ref<'zh' | 'us'>('zh');
@@ -87,7 +88,7 @@ async function fetchMarketData(force = false) {
   else loading.value = true;
   error.value = '';
   try {
-    const res = await fetch(`${API_BASE}/api/v1/market?market=${key}&limit=50`);
+    const res = await apiFetch(`${API_BASE}/api/v1/market?market=${key}&limit=50`);
     const data = await res.json();
     if (activeTab.value !== key) return; // 用户已切换市场，丢弃过期结果
     if (data.success) {

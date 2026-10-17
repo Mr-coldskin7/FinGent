@@ -5,8 +5,6 @@ from bs4 import BeautifulSoup, XMLParsedAsHTMLWarning
 import pandas as pd
 import httpx
 from datetime import datetime, timedelta
-import numpy as np
-from typing import Dict, List
 from dotenv import load_dotenv
 
 # ===============================================================================
@@ -304,7 +302,7 @@ async def get_financial_report(symbol: str):
         all_tables = soup.find_all("table")
         parsed_tables = []
 
-        for i, table in enumerate(all_tables):
+        for table in all_tables:
             rows = table.find_all("tr")
             if not rows:
                 continue

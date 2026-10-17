@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import os
 import json
@@ -11,6 +12,8 @@ from dotenv import load_dotenv
 from sse_starlette.sse import EventSourceResponse
 import asyncio
 from typing import Any, Dict, List, Optional
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
 import queue
 from queue import Queue as _Queue
 import pandas as pd
@@ -20,20 +23,14 @@ load_dotenv()
 
 # ========== 统一配置 ==========
 from config import get_settings, get_model_config, update_model_config, reset_model_config, ModelConfig, MODEL_PRESETS
+from api_auth import decide, validate_token
 
 settings = get_settings()
 
 # ========== 初始化 Graph ==========
-from langchain_openai import ChatOpenAI
-from LLM.preprocess import Preprocessor
-from LLM.router import Router
-from LLM.agent import TECHNICAL_NERD, Morefit, RiskManager, SentimentAnalyzer
-from LLM.graph import FinGraph
+from LLM.graph import FinGraph, assemble_fin_graph
 from LLM.checkpointer import get_checkpointer, get_checkpointer_async
-from LLM.unified_stock_tools import *
 from LLM.llm import create_chat_model
-from LLM.risk_tools import RISK_TOOLS
-from LLM.sentiment_tools import SENTIMENT_TOOLS
 from Data.memory import canonical_agent_name, get_memory_manager
 
 # Checkpointer 可插拔：FINGENT_CHECKPOINTER=memory(默认)|redis
@@ -43,30 +40,22 @@ checkpointer, _cleanup_ckpt = get_checkpointer()
 memory_manager = get_memory_manager()
 
 
+# 回测只用两个 Agent（速度优先，逐日 LLM 调用成本高）
+BACKTEST_AGENT_NAMES = ("technical-nerd", "morefit")
+
+
 def build_fin_graph(model_config: ModelConfig) -> FinGraph:
     """工厂函数：根据模型配置创建 FinGraph 实例（agent 全部由注册表装配）。
 
     新增 DIY agent = 丢 LLM/skills/<name>/SKILL.md 即自动注册并参与投票。
     """
-    from LLM.registry import all_agents as _registry_all_agents, instantiate as _instantiate
-
     llm = create_chat_model(
         api_key=model_config.api_key,
         base_url=model_config.base_url,
         model_name=model_config.model_name,
         temperature=model_config.temperature,
     )
-    agents = {
-        name: _instantiate(name, llm, checkpointer, memory_manager)
-        for name in _registry_all_agents()
-    }
-    return FinGraph(
-        preprocessor=Preprocessor(llm, checkpointer),
-        router=Router(),
-        agent=agents,
-        checkpointer=checkpointer,
-        memory_manager=memory_manager,
-    )
+    return assemble_fin_graph(llm, checkpointer, memory_manager)
 
 
 # 全局 FinGraph 实例 + 并发锁
@@ -87,13 +76,43 @@ def cleanup():
 
 
 # ========== API ==========
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """应用生命周期：启动时预热行情缓存（替代已弃用的 on_event）。"""
+    await _prewarm_market_cache()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_methods=["*"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+
+# 鉴权：判定逻辑见 api_auth.py（默认拒绝；公开接口清单也在那里）
+validate_token(settings.api_token)  # token 过短则拒绝启动
+if not settings.api_token and settings.api_host not in ("127.0.0.1", "localhost", "::1"):
+    print("⚠️  API 监听非本机地址，但未设置 FINGENT_API_TOKEN：受保护接口仅允许本机访问。")
+
+
+@app.middleware("http")
+async def api_access_control(request: Request, call_next):
+    decision = decide(
+        method=request.method,
+        path=request.url.path,
+        authorization=request.headers.get("authorization"),
+        client_host=request.client.host if request.client else "",
+        token=get_settings().api_token,
+    )
+    if not decision.allowed:
+        return JSONResponse(
+            {"success": False, "error": decision.message, "code": decision.code},
+            status_code=decision.status,
+            headers={"WWW-Authenticate": "Bearer"} if decision.status == 401 else None,
+        )
+    return await call_next(request)
 
 
 class ChatRequest(BaseModel):
@@ -662,8 +681,7 @@ def _schedule_market_refresh(key: str, market: str, limit: int) -> None:
     _t.add_done_callback(_BG_TASKS.discard)
 
 
-@app.on_event("startup")
-async def _prewarm_market_cache():
+async def _prewarm_market_cache() -> None:
     """启动时先读落盘快照（立即可用），再后台预热行情缓存。"""
     _load_market_snapshots()
 
@@ -925,7 +943,6 @@ async def backtest(req: BacktestRequest):
     前端只使用 /api/v1/backtest-stream（流式进度 + 可取消）。
     """
     try:
-        from Trade.runner import run_backtest_from_symbol
         import asyncio
 
         os.environ["FINGENT_BACKTEST_STRICT"] = "1"
@@ -938,17 +955,8 @@ async def backtest(req: BacktestRequest):
             temperature=req.temperature,
         )
         temp_checkpointer, temp_cleanup = await get_checkpointer_async()
-
-        from LLM.registry import instantiate as _reg_instantiate
-
-        temp_graph = FinGraph(
-            preprocessor=Preprocessor(temp_model, temp_checkpointer),
-            router=Router(),
-            agent={
-                name: _reg_instantiate(name, temp_model, temp_checkpointer)
-                for name in ("technical-nerd", "morefit")
-            },
-            checkpointer=temp_checkpointer,
+        temp_graph = assemble_fin_graph(
+            temp_model, temp_checkpointer, agent_names=BACKTEST_AGENT_NAMES
         )
 
         try:
@@ -1080,17 +1088,8 @@ async def backtest_stream(req: BacktestRequest):
                 temperature=req.temperature,
             )
             temp_checkpointer, temp_cleanup = get_checkpointer()
-
-            from LLM.registry import instantiate as _reg_instantiate
-
-            temp_graph = FinGraph(
-                preprocessor=Preprocessor(temp_model, temp_checkpointer),
-                router=Router(),
-                agent={
-                    name: _reg_instantiate(name, temp_model, temp_checkpointer)
-                    for name in ("technical-nerd", "morefit")
-                },
-                checkpointer=temp_checkpointer,
+            temp_graph = assemble_fin_graph(
+                temp_model, temp_checkpointer, agent_names=BACKTEST_AGENT_NAMES
             )
 
             cerebro = bt.Cerebro()
@@ -1434,7 +1433,6 @@ async def health():
 # 这里提供只读/编辑接口，保存后热重建 FinGraph 立即生效。
 
 from fastapi import HTTPException
-from fastapi.responses import JSONResponse
 
 
 @app.exception_handler(Exception)

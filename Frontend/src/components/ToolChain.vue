@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { ToolCall, AgentToolChain } from '../types/index';
+import { agentColor, agentLabel } from '../utils/agents';
 
 interface Props {
   toolChain?: ToolCall[];
@@ -50,27 +51,9 @@ function formatArgs(args?: Record<string, any>): string {
   return entries.map(([k, v]) => `${k}=${v}`).join(', ');
 }
 
-// 获取Agent显示名称
-function getAgentName(name: string): string {
-  const names: Record<string, string> = {
-    'Morefit': '基本面分析',
-    'TECHNICAL_NERD': '技术面分析',
-    'RiskManager': '风控分析',
-    'SentimentAnalyzer': '舆情分析',
-  };
-  return names[name] || name;
-}
-
-// 获取Agent颜色
-function getAgentColor(name: string): string {
-  const colors: Record<string, string> = {
-    'Morefit': '#3b82f6',
-    'TECHNICAL_NERD': '#10b981',
-    'RiskManager': '#f59e0b',
-    'SentimentAnalyzer': '#f5a524',
-  };
-  return colors[name] || '#6b7280';
-}
+// Agent 展示名与颜色统一来自 utils/agents.ts
+const getAgentName = agentLabel;
+const getAgentColor = agentColor;
 </script>
 
 <template>

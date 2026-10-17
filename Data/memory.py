@@ -15,9 +15,8 @@ import asyncio
 import sqlite3
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
-from typing import Optional, List, Dict, Any, Tuple
+from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
-from contextlib import asynccontextmanager
 from pathlib import Path
 
 try:
@@ -458,18 +457,6 @@ class MemoryManager:
         if not record:
             return None
         await self.update_feedback(record.id, feedback)
-        return record.id
-
-    def _sync_record_feedback(
-        self,
-        session_id: str,
-        stock_symbol: str,
-        feedback: str,
-    ) -> Optional[int]:
-        record = self._sync_get_analysis_record(session_id, stock_symbol)
-        if not record:
-            return None
-        self._sync_update_feedback(record.id, feedback)
         return record.id
 
     async def get_recent_analyses(
@@ -1002,7 +989,7 @@ class MemoryManager:
             weight = weights.get(agent_name, 1.0)
             stats = await self._get_agent_stat(user_id, agent_name)
             if stats:
-                parts.append(f"【你的表现统计】")
+                parts.append("【你的表现统计】")
                 parts.append(
                     f"- 当前权重: {weight:.2f} (基准 1.0)"
                 )

@@ -3,16 +3,10 @@ Tests for Data/models.py — UnifiedStockData, to_dict(), to_json().
 """
 
 import json
-import pytest
-from datetime import datetime
 from Data.models import (
     BasicInfo,
     PriceData,
     CompanyDescription,
-    FinancialReport,
-    NewsData,
-    TechnicalIndicators,
-    DataSource,
     UnifiedStockData,
     DataType,
 )

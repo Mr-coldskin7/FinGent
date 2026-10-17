@@ -32,19 +32,10 @@ def run_backtest_cli(args):
 
     # 导入依赖
     try:
-        from langchain_openai import ChatOpenAI
         from LLM.checkpointer import get_checkpointer
         from LLM.preprocess import Preprocessor
         from LLM.router import Router
-        from LLM.agent import TECHNICAL_NERD, Morefit
         from LLM.graph import FinGraph
-        from LLM.unified_stock_tools import (
-            get_stock_price,
-            get_stock_basic_info,
-            get_stock_company_info,
-            get_stock_financial_report_links,
-            get_stock_financial_statements,
-        )
         from LLM.llm import create_chat_model
         from Trade.runner import run_backtest_from_symbol
     except ImportError as e:

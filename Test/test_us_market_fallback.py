@@ -6,7 +6,6 @@
 import asyncio
 
 import api_server as a
-from Data.providers import yahoo_us
 
 _YAHOO_ROW = {"symbol": "AAPL", "name": "Apple Inc.", "price": 1.0, "change": 0.0,
               "changePercent": 0.0, "volume": 1, "dayHigh": 1.0, "dayLow": 1.0}

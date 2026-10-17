@@ -4,6 +4,7 @@ import DecisionCard from './DecisionCard.vue';
 import PortfolioSuggestion from './PortfolioSuggestion.vue';
 import ToolChain from './ToolChain.vue';
 import MarkdownRender from './MarkdownRender.vue';
+import { agentCssClass, agentFullName } from '../utils/agents';
 
 interface Props {
   message: Message;
@@ -18,25 +19,6 @@ function isDualAgentMarkdown(content: string): boolean {
          content.includes('## 双Agent投票结果');
 }
 
-// Agent 配置
-const AGENT_CONFIG: Record<string, { name: string; icon: string; class: string; color: string }> = {
-  'Morefit': { name: 'Morefit 基本面', icon: '', class: 'morefit', color: '#60a5fa' },
-  'TECHNICAL_NERD': { name: 'Technical_Nerd 技术面', icon: '', class: 'technical', color: '#34d399' },
-  'RiskManager': { name: 'RiskManager 风控', icon: '', class: 'riskmanager', color: '#fbbf24' },
-  'SentimentAnalyzer': { name: 'SentimentAnalyzer 舆情', icon: '', class: 'sentimentanalyzer', color: '#f5a524' },
-};
-
-function getAgentClass(agentName: string): string {
-  return AGENT_CONFIG[agentName]?.class || 'default';
-}
-
-function getAgentIcon(agentName: string): string {
-  return AGENT_CONFIG[agentName]?.icon || '';
-}
-
-function getAgentDisplayName(agentName: string): string {
-  return AGENT_CONFIG[agentName]?.name || agentName;
-}
 
 function formatVote(vote: string): string {
   const map: Record<string, string> = {
@@ -104,12 +86,11 @@ function formatVote(vote: string): string {
           v-for="(decision, idx) in message.data.decisions"
           :key="idx"
           class="agent-analysis-section"
-          :class="getAgentClass(decision.agent || message.allToolChains?.[idx]?.agent || 'default')"
+          :class="agentCssClass(decision.agent || message.allToolChains?.[idx]?.agent || 'default')"
         >
           <div class="agent-section-header">
             <div class="agent-badge">
-              <span class="agent-icon">{{ getAgentIcon(decision.agent || message.allToolChains?.[idx]?.agent || '') }}</span>
-              <span class="agent-name">{{ getAgentDisplayName(decision.agent || message.allToolChains?.[idx]?.agent || '') }}</span>
+              <span class="agent-name">{{ agentFullName(decision.agent || message.allToolChains?.[idx]?.agent || '') }}</span>
             </div>
             <div class="vote-tag" :class="decision.vote">
               {{ formatVote(decision.vote) }}

@@ -79,7 +79,7 @@ def test_resolve_weights_global_user_no_double_count(mm):
 
 # ---------- P0-2 不一致检测修复 ----------
 def test_inconsistency_not_comparing_with_itself(mm):
-    rid_old = _run(mm.record_analysis("s1", "NVDA", "q", {"A": "BUY"}, "BUY", user_id="u"))
+    _run(mm.record_analysis("s1", "NVDA", "q", {"A": "BUY"}, "BUY", user_id="u"))
     # 本次是反转，且已写入本次记录（rid_new）；应与 rid_old 比较而非自己
     rid_new = _run(mm.record_analysis("s2", "NVDA", "q", {"A": "SELL"}, "SELL", user_id="u"))
     warn = _run(mm.find_inconsistencies("u", "NVDA", "SELL", exclude_id=rid_new))

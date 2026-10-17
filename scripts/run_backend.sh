@@ -4,7 +4,7 @@
 cd "$(dirname "$0")/.." || exit 1
 mkdir -p logs
 # 尊重 .env 的 API_HOST/API_PORT（review P3）；二次重启退避，避免绑定失败时刷爆日志
-API_HOST="${API_HOST:-0.0.0.0}"
+API_HOST="${API_HOST:-127.0.0.1}"  # 默认仅本机可达；需要局域网访问时显式设置 API_HOST=0.0.0.0
 API_PORT="${API_PORT:-8000}"
 backoff=2
 while true; do
