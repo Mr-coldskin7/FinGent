@@ -129,7 +129,9 @@ def parse_history(payload: dict[str, Any]) -> list[dict[str, Any]]:
 async def fetch_daily_bars(symbol: str, start: date, end: date, timeout: float = 15.0) -> list[dict[str, Any]]:
     """拉取 [start, end] 的日线（Yahoo 直连）。失败返回空列表，由上层判定为"待验证"。"""
     p1 = int(datetime(start.year, start.month, start.day, tzinfo=timezone.utc).timestamp())
-    p2 = int(datetime(end.year, end.month, end.day, tzinfo=timezone.utc).timestamp())
+    # period2 是开区间：end 当日 00:00 的时间戳会把末日 K 线排除在外，
+    # 末端恰好落在出場日附近的记录会多一轮“待验证”（review P3 已修）
+    p2 = int(datetime(end.year, end.month, end.day, tzinfo=timezone.utc).timestamp()) + 86_400 - 1
     async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
         try:
             r = await client.get(

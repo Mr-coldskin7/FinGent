@@ -28,3 +28,6 @@ memory/*.db
 
 # Playwright 浏览器会话产物（截图/console 日志，不入库）
 .playwright-mcp/
+
+# 回测审计日志（运行产物，不入库）
+Trade/backtest_audit.jsonl

@@ -583,6 +583,7 @@ _MARKET_TTL_S = {"zh": 60, "us": 120}
 _MARKET_CACHE: dict = {}          # key -> {"data": payload, "ts": float}
 _MARKET_LOCKS: dict = {}          # key -> asyncio.Lock，防止并发重复拉取
 _MARKET_REFRESHING: set = set()   # 正在后台刷新的 key
+_BG_TASKS: set = set()            # 后台任务引用，防止 fire-and-forget 被 GC（review P3）
 
 
 async def _fetch_market(market: str, limit: int) -> dict:
@@ -655,7 +656,10 @@ def _schedule_market_refresh(key: str, market: str, limit: int) -> None:
         finally:
             _MARKET_REFRESHING.discard(key)
 
-    asyncio.create_task(_run())
+    # 保留引用：fire-and-forget 任务无人引用时可能被 GC 中途取消（review P3）
+    _t = asyncio.create_task(_run())
+    _BG_TASKS.add(_t)
+    _t.add_done_callback(_BG_TASKS.discard)
 
 
 @app.on_event("startup")
@@ -670,7 +674,9 @@ async def _prewarm_market_cache():
             except Exception:
                 pass
 
-    asyncio.create_task(_warm())
+    _t = asyncio.create_task(_warm())
+    _BG_TASKS.add(_t)
+    _t.add_done_callback(_BG_TASKS.discard)
 
 
 @app.get("/api/v1/market")

@@ -6,6 +6,12 @@
     "timeout_s": 120
   },
   {
+    "id": "sector_tech",
+    "query": "科技股还能买吗？",
+    "expect_route": "sector",
+    "timeout_s": 240
+  },
+  {
     "id": "single_morefit",
     "query": "茅台估值高吗？",
     "agents": ["morefit"],

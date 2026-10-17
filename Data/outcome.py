@@ -151,6 +151,9 @@ async def verify_pending(
             if out is None:
                 summary["pending"] += 1
                 h_stats["pending"] += 1
+                # 计一次尝试：已过最短验证期的记录反复取不到行情（退市/数据源故障），
+                # 达到 MAX_VERIFY_ATTEMPTS 后放弃，避免队头阻塞新记录（review P2 已修）
+                await mm.bump_verify_attempts(item["id"])
                 continue
 
             rows = []

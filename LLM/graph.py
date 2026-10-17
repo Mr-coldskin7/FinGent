@@ -46,6 +46,8 @@ import contextvars
 _progress_cb_var: contextvars.ContextVar = contextvars.ContextVar(
     "fingent_progress_cb", default=None
 )
+# fire-and-forget 任务保留引用：CPython 里无人引用的 Task 可能被 GC 中途取消（review P3）
+_background_tasks: set = set()
 
 
 def emit_progress(event: dict) -> None:
@@ -66,7 +68,9 @@ def emit_progress(event: dict) -> None:
             pass  # 进度推送失败绝不影响主流程
 
     try:
-        asyncio.get_running_loop().create_task(_fire())
+        _t = asyncio.get_running_loop().create_task(_fire())
+        _background_tasks.add(_t)
+        _t.add_done_callback(_background_tasks.discard)
     except RuntimeError:
         pass  # 无事件循环（CLI 同步场景），跳过进度
 
@@ -1106,15 +1110,27 @@ class FinGraph:
             return final_values
 
         # Passive + Active Self-Improve: record analysis & check consistency
-        if final_values.get("status") == "completed" and self.memory_manager:
+        # 闲聊/板块问答没有个股实体，不写入分析历史（否则 stock=None 会触发
+        # .upper() 异常且污染复盘/验证口径，review P3 已修）
+        if (
+            final_values.get("status") == "completed"
+            and final_values.get("stock")
+            and self.memory_manager
+        ):
             try:
                 stock = final_values.get("stock", "UNKNOWN")
                 agent_results = final_values.get("agent_results", {})
-                final_decision = final_values.get("final_decision", {})
+                final_decision = final_values.get("final_decision") or {}
                 votes = {
                     name: r.get("vote", "HOLD")
                     for name, r in agent_results.items()
                 }
+                # 单 Agent 分析没有 final_decision：从唯一投试点导出真实投票，
+                # 否则会被记成 HOLD，污染复盘/不一致检测/结果验证（review P2 已修，
+                # 与 Eval/reliability 的单 Agent 判定口径一致）
+                final_vote = final_decision.get("final_vote")
+                if not final_vote:
+                    final_vote = next(iter(votes.values()), "HOLD") if len(votes) == 1 else "HOLD"
                 user_id = final_values.get("user_id", "anonymous")
                 details = {
                     name: {
@@ -1128,7 +1144,7 @@ class FinGraph:
                     stock_symbol=stock,
                     query=user_input,
                     agent_votes=votes,
-                    final_decision=final_decision.get("final_vote", "HOLD"),
+                    final_decision=final_vote,
                     reasoning_summary=final_decision.get("suggestion", ""),
                     user_id=user_id,
                     agent_details=details,
@@ -1137,7 +1153,7 @@ class FinGraph:
                 inconsistency = await self.memory_manager.find_inconsistencies(
                     user_id=user_id,
                     stock_symbol=stock,
-                    current_decision=final_decision.get("final_vote", "HOLD"),
+                    current_decision=final_vote,
                     exclude_id=record_id,
                 )
                 if inconsistency:

@@ -51,6 +51,8 @@ class CacheManager:
         self._default_ttl = default_ttl
         self._redis_ttl = redis_ttl
         self._redis: Optional[Any] = None
+        # symbol -> 该 symbol 写入过的 L2 键集合（用于按 symbol 失效，review P2 已修）
+        self._sym_to_keys: Dict[str, set] = {}
 
         # 尝试连接 Redis L2（StrictRedis 同步客户端）
         if redis_url and _HAS_REDIS:
@@ -137,11 +139,14 @@ class CacheManager:
                     self._redis.setex,
                     f"fingent_cache:{key}", self._redis_ttl, serialized
                 )
+                if symbol not in self._sym_to_keys:
+                    self._sym_to_keys[symbol] = set()
+                self._sym_to_keys[symbol].add(key)
             except (TypeError, ValueError):
                 pass  # 不可序列化，跳过 L2
 
     def invalidate(self, symbol: str = None):
-        """清除缓存"""
+        """清除缓存（symbol 模式下同时失效 L1 与 L2；无 symbol 时清 空 全部）"""
         if symbol:
             keys_to_del = [
                 k
@@ -150,8 +155,15 @@ class CacheManager:
             ]
             for k in keys_to_del:
                 del self._memory[k]
+            # L2 失效：否则 Redis 里的旧行会存活到 redis_ttl，
+            # L1 过期后又回填出旧数据，形成"复活"（review P2 已修）
+            for k in self._sym_to_keys.pop(symbol, set()):
+                self._safe_call(self._redis.delete, f"fingent_cache:{k}")
         else:
             self._memory.clear()
+            if self._redis:
+                self._safe_call(self._redis.delete, *[f"fingent_cache:{k}" for sym_keys in self._sym_to_keys.values() for k in sym_keys])
+            self._sym_to_keys.clear()
 
     def get_stats(self) -> Dict[str, int]:
         """获取缓存统计"""

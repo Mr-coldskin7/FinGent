@@ -35,16 +35,19 @@ class InfoService:
         print(data.price_data[-1].close)
     """
 
-    def __init__(self, cache_ttl: int = 300):
+    def __init__(self, cache_ttl: Optional[int] = None):
         """
         初始化
 
         Args:
-            cache_ttl: 缓存过期时间（秒），默认5分钟
+            cache_ttl: 缓存过期时间（秒）。缺省读 CACHE_DEFAULT_TTL（默认 300），
+                此前该配置项从未被接入（review P3 已修）。
         """
         try:
             from config import get_settings
             _settings = get_settings()
+            if cache_ttl is None:
+                cache_ttl = _settings.cache_default_ttl
             if _settings.cache_backend == "redis":
                 self.cache = CacheManager(
                     default_ttl=cache_ttl,
@@ -55,7 +58,8 @@ class InfoService:
                 # memory 模式：不触碰 Redis，仅使用 L1
                 self.cache = CacheManager(default_ttl=cache_ttl)
         except Exception:
-            self.cache = CacheManager(default_ttl=cache_ttl)
+            # 配置读取失败时退回默认 300（与 CACHE_DEFAULT_TTL 默认值一致）
+            self.cache = CacheManager(default_ttl=cache_ttl if cache_ttl is not None else 300)
 
     async def fetch(
         self,

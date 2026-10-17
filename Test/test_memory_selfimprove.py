@@ -145,7 +145,7 @@ def test_migration_v3_canonicalizes_legacy_rows(tmp_path):
     c.commit(); c.close()
     M.MemoryManager(db_path=db)  # 触发 v3 迁移
     c = sqlite3.connect(db)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert c.execute("PRAGMA user_version").fetchone()[0] == M.SCHEMA_VERSION
     assert c.execute("SELECT agent_name FROM agent_votes WHERE analysis_id=?", (rid,)).fetchall() == [("technical-nerd",)]
     assert '"technical-nerd"' in c.execute("SELECT agent_votes FROM analysis_history WHERE id=?", (rid,)).fetchone()[0]
 

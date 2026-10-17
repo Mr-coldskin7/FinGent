@@ -41,7 +41,11 @@ PRIMARY_HORIZON = 20          # 用于判定"已验证"与更新客观权重的�
 MIN_VERIFIED_SAMPLES = 30     # 每个 Agent 至少这么多已验证样本才更新客观权重
 
 # 存储版本（PRAGMA user_version）。只追加新表/列，不改已有字段语义。
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
+
+# 待验证记录的最大验证尝试次数：数据源失败/退市等永久性失败不应阻塞后续记录
+# （review P2：oldest-200 无上限跳过会造成队头阻塞）。达到上限后不再重试。
+MAX_VERIFY_ATTEMPTS = 10
 
 _V2_SQL = """
 CREATE TABLE IF NOT EXISTS agent_votes (
@@ -260,6 +264,15 @@ class MemoryManager:
             conn.execute("PRAGMA user_version = 2")
         if version < 3:
             _canonicalize_legacy_names(conn)
+            conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+        if version < 4:
+            # 验证尝试计数：防止永久无法验证的记录（退市/格式异常/数据源长期失败）
+            # 在 oldest-拉取中无限占据名额，阻塞新记录（review P2 已修）
+            cols = {r[1] for r in conn.execute("PRAGMA table_info(analysis_history)").fetchall()}
+            if "verify_attempts" not in cols:
+                conn.execute(
+                    "ALTER TABLE analysis_history ADD COLUMN verify_attempts INTEGER NOT NULL DEFAULT 0"
+                )
             conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
 
     def _sync_conn(self):
@@ -829,7 +842,7 @@ class MemoryManager:
                     trigger_count=1,
                     source=source,
                     active=True,
-                    created_at=datetime.now().isoformat(),
+                    created_at=datetime.now(timezone.utc).isoformat(),  # 与 SQLite CURRENT_TIMESTAMP(UTC) 口径一致
                 )
 
     def _sync_add_or_update_rule(
@@ -879,7 +892,7 @@ class MemoryManager:
                     trigger_count=1,
                     source=source,
                     active=True,
-                    created_at=datetime.now().isoformat(),
+                    created_at=datetime.now(timezone.utc).isoformat(),  # 与 SQLite CURRENT_TIMESTAMP(UTC) 口径一致
                 )
 
     async def get_rules(
@@ -1177,9 +1190,10 @@ class MemoryManager:
                 WHERE a.created_at <= ?
                   AND NOT EXISTS (SELECT 1 FROM agent_outcomes o
                                   WHERE o.analysis_id = a.id AND o.horizon_days = ?)
+                  AND a.verify_attempts < ?
                 ORDER BY a.id LIMIT ?
                 """,
-                (_utc_cutoff(min_age_days), horizon, limit),
+                (_utc_cutoff(min_age_days), horizon, MAX_VERIFY_ATTEMPTS, limit),
             ).fetchall()
             out = []
             for r in rows:
@@ -1193,6 +1207,18 @@ class MemoryManager:
                     "votes": {a: v for a, v in votes},
                 })
             return out
+
+    async def bump_verify_attempts(self, analysis_id: int) -> None:
+        """验证仍未完成时累加尝试计数；达到 MAX_VERIFY_ATTEMPTS 后不再被拉取。"""
+        await asyncio.to_thread(self._sync_bump_verify_attempts, analysis_id)
+
+    def _sync_bump_verify_attempts(self, analysis_id: int) -> None:
+        with self._sync_conn() as conn:
+            conn.execute(
+                "UPDATE analysis_history SET verify_attempts = verify_attempts + 1 WHERE id = ?",
+                (analysis_id,),
+            )
+            conn.commit()
 
     async def save_outcome_rows(self, analysis_id: int, horizon: int, rows: List[tuple],
                                 mark_verified: bool) -> None:

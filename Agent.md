@@ -174,3 +174,23 @@
 
 **测试**：全量 pytest 253 通过；`npm run build` 通过。
 **未做**：规则的"自动挖掘"来源仍未实现（`source=self_mined` 只是占位）；定时运行结果验证仍是手动命令。
+
+### 7.18 收尾与 review 修复（2026-10-17 上午，两批提交）
+
+**第一批：安全 checkpoint（35f6cdf）+ 立即项**
+- 把累计 81 个未提交文件（约 1.9 万行）提交为 checkpoint；`.playwright-mcp/`、`memory/*.db`、`*.bak` 加入 `.gitignore`；`l3_memory.db` 与 `SKILL.md.bak` 移出 git 追踪（review P1：live 用户数据库不应入库）。**残留**：历史提交里仍有旧版 db（副防御已做不了，提醒主人若仓库公开需注意）。
+- `.gitattributes` 把 `*.md`/`*.json` 标 binary 的旧行删除（只锁 lockfile），README/Agent.md 恢复正常 diff。
+- README 刷新：删除不存在的技术方案书引用；补全评测/规则/复盘/Agent 管理等新端点；目录结构补 Eval/、scripts/、yahoo_us、ak_isolated、symbol_alias 等；新增 Eval.reliability / Data.outcome / launchd 调度命令；模型描述修正为"OpenAI 兼容接口可切换"。
+- K=5 重跑（修复 parse_fallback 后）：`Eval/runs/20261017_112055/`，15/15 能跑通且跑得对，降级率 0%，解析降级 0 次；投票波动仍在（morefit HOLD×7/BUY×3 等），单股两次结果不一致的问题已被 K 次运行机制覆盖。
+- 结果验证定时调度：`scripts/run_outcome.sh` + `scripts/com.fingent.outcome.plist`（工作日 18:10），安装命令见 README。
+- 反馈权重双倍叠加 bug（review P1）：`/api/v1/feedback` 曾同时调 `adjust_weight` + `record_agent_outcome`，同一 delta 应用两次。修复：`record_agent_outcome` 返回最终权重，端点只调它一次；新增量值回归测试（agree +0.05、disagree −0.10）。
+
+**第二批：review P2/P3 修复 + 功能项**
+- **规则自动挖掘（原占位兑现，任务 #5）**：`MemoryManager.mine_outcome_rules()`——从 `agent_outcomes` 判错行（主验证期）提炼候选纠正规则，纯模板不调 LLM；新规则 `active=0`、`source=self_mined`，同一身份的重复失败仅 trigger_count 自增；已启用的规则重挖时不会被降级。接入 `Data.outcome.run()`（输出 `self_mined_rules`）。规则面板的 `self_mined` 来源标签已预留。6 个新单测（`Test/test_self_mined_rules.py`）。
+- **美股主源互换（任务 #6）**：Yahoo 直连为主源，Tiingo 降为兕底（免费额度按小时限流，持续访问会超额；Yahoo 无 key 无配额）。两源都不完整时报中文错误并注明两侧原因。`_get_us_market` 双层兕底均不能穿透为 500。实测 Yahoo 主源 20/20。
+- **单 Agent 决策误记 HOLD（review P2）**：`graph.run` 归档时单 Agent 无 `final_decision`，曾归为 HOLD。现在从唯一投试点导出真实投票（与 Eval 口径一致）；`final_decision` None 时不再误用 `.get`。
+- **验证队头阻塞（review P2）**：schema v4 新增 `analysis_history.verify_attempts`；已过期仍取不到行情的记录每次记账一次，达 `MAX_VERIFY_ATTEMPTS=10` 后不再拉取，避免退市/数据源故障的旧行永远占据 oldest-200 名额。
+- **L2 缓存失效缺口（review P2）**：`CacheManager.invalidate(symbol)` 现在同时删 Redis 键（维护 symbol→key 映射），防止 L1 过期后旧数据"复活"。
+- **选做 P3**：`run_backend.sh` 尊重 `API_HOST/PORT` + 退避重启；规则 `created_at` 统一 UTC；RulesPanel 补 tiktok-auntie 标签；`Eval/cases.json` 增加 sector 用例；`fetch_daily_bars` 的 period2 揪 +1 天（开区间）；graph/api_server 的 fire-and-forget 任务保留引用；无个股实体（闲聊/板块）不再写入分析历史；`CACHE_DEFAULT_TTL` 接入 `InfoService`（此前是死配置）；`Trade/backtest_audit.jsonl` 入 gitignore。
+- **遗留（review 未修）**：`_get_us_market` 全有或全无（19/20 也整批兕底）— 保持一致性优先，后续可考虑部分接受阈值；pyright 历史噪声按 §8.4 维持不追零。
+

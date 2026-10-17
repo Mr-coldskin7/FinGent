@@ -28,6 +28,7 @@ const AGENT_LABEL: Record<string, string> = {
   morefit: '估值分析',
   'risk-manager': '风险管理',
   'sentiment-analyzer': '舆情分析',
+  'tiktok-auntie': '涨停大姨（短线情绪）',
 };
 const SOURCE_LABEL: Record<string, string> = {
   explicit_feedback: '用户纠正',
